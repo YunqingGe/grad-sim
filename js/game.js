@@ -1,0 +1,4237 @@
+/*
+  读研模拟器 · 游戏主程序
+
+  整体是一个立即执行函数，所有数据和函数共用同一个作用域。
+  阅读顺序：数据（学生 / 导师 / 日常 / 事件 / 结局）→ 规则 → 操作（G.xxx）→ 界面（render）。
+  数值与规则说明见项目文档《玩法设计》，事件清单见《事件库》。
+*/
+
+(function () {
+  "use strict";
+  const KEY = "yanmo_save_v10";
+  const LBL = {
+    health: "健康",
+    mood: "心情",
+    res: "心态",
+    hair: "发量",
+    rel: "人缘",
+    scheme: "城府",
+    luck: "人品",
+    ability: "科研能力",
+    progress: "科研进展",
+    trust: "导师心腹",
+    envy: "同辈忮忌",
+    money: "金钱",
+    wealth: "家境",
+  };
+  const ORDER = [
+    "health",
+    "mood",
+    "res",
+    "hair",
+    "rel",
+    "scheme",
+    "luck",
+    "ability",
+    "progress",
+    "trust",
+    "envy",
+  ];
+  /* ================================================================
+   * 学生类型：八种抽签结果，每种的属性高低项和描述
+   * ================================================================ */
+  const STUDENTS = [
+    {
+      tag: "学霸型",
+      w: 1,
+      hi: ["ability", "res"],
+      lo: ["mood", "wealth"],
+      desc: "本科成绩拔尖，上手比别人快，也坐得住。就是情绪容易起伏，兜里不宽裕。",
+      a: {
+        ability: 25,
+        mood: 55,
+        wealth: 30,
+        rel: 40,
+        health: 80,
+        res: 60,
+        hair: 75,
+        scheme: 20,
+        luck: 45,
+      },
+    },
+    {
+      tag: "社牛型",
+      w: 1,
+      hi: ["rel", "mood"],
+      lo: ["ability", "res"],
+      desc: "跟谁都聊得来，走到哪儿都有饭局，天塌下来也睡得着。科研底子薄了点。",
+      a: {
+        ability: 10,
+        mood: 75,
+        wealth: 35,
+        rel: 70,
+        health: 80,
+        res: 40,
+        hair: 75,
+        scheme: 20,
+        luck: 40,
+      },
+    },
+    {
+      tag: "家里有矿型",
+      w: 1,
+      hi: ["wealth", "hair"],
+      lo: ["ability", "res"],
+      desc: "生活费从来不是问题，气色也好。没吃过什么苦，科研和抗压都一般。",
+      a: {
+        ability: 8,
+        mood: 70,
+        wealth: 80,
+        rel: 50,
+        health: 80,
+        res: 40,
+        hair: 85,
+        scheme: 15,
+        luck: 40,
+      },
+    },
+    {
+      tag: "小镇做题家",
+      w: 1,
+      hi: ["res", "health", "ability"],
+      lo: ["wealth", "scheme", "rel"],
+      desc: "一路考上来的，能吃苦、身体好、坐得住。没钱，也不太会来事。",
+      a: {
+        ability: 20,
+        mood: 55,
+        wealth: 20,
+        rel: 35,
+        health: 90,
+        res: 70,
+        hair: 80,
+        scheme: 10,
+        luck: 45,
+      },
+    },
+    {
+      tag: "人精型",
+      w: 1,
+      hi: ["scheme", "rel"],
+      lo: ["luck", "health"],
+      desc: "察言观色是本能，导师一个眼神就知道该接什么话。运气和身体都一般。",
+      a: {
+        ability: 12,
+        mood: 60,
+        wealth: 45,
+        rel: 60,
+        health: 75,
+        res: 55,
+        hair: 70,
+        scheme: 40,
+        luck: 35,
+      },
+    },
+    {
+      tag: "欧皇型",
+      w: 1,
+      hi: ["luck", "mood"],
+      lo: ["scheme", "ability"],
+      desc: "抽卡必出金，考试总压线过。除了运气好，其他都平平。",
+      a: {
+        ability: 10,
+        mood: 70,
+        wealth: 40,
+        rel: 50,
+        health: 80,
+        res: 45,
+        hair: 75,
+        scheme: 15,
+        luck: 60,
+      },
+    },
+    {
+      tag: "天崩开局",
+      w: 1,
+      hi: [],
+      lo: [],
+      note: "各项全面偏低",
+      noteCls: "down",
+      desc: "跨专业调剂来的，什么都要从头学。没钱、没人脉，身体和心态也只在及格线上。",
+      a: {
+        ability: 5,
+        mood: 50,
+        wealth: 20,
+        rel: 30,
+        health: 70,
+        res: 30,
+        hair: 62,
+        scheme: 10,
+        luck: 30,
+      },
+    },
+    {
+      tag: "天选之子",
+      w: 1,
+      hi: [],
+      lo: [],
+      note: "各项全面偏高",
+      noteCls: "up",
+      desc: "本校保研，家境殷实，人缘好身体棒，连头发都比别人多。起点高出一截。",
+      a: {
+        ability: 22,
+        mood: 75,
+        wealth: 70,
+        rel: 60,
+        health: 90,
+        res: 60,
+        hair: 90,
+        scheme: 30,
+        luck: 55,
+      },
+    },
+  ];
+  function drawStudent(cur) {
+    const pool = [];
+    STUDENTS.forEach((t, i) => {
+      if (i !== cur) for (let k = 0; k < t.w; k++) pool.push(i);
+    });
+    return pool[rnd(pool.length)];
+  }
+  /* ================================================================
+   * 导师类型：四种导师的名字、毕业要求和描述
+   * ================================================================ */
+  const MENTORS = [
+    {
+      id: "big",
+      req: "A",
+      name: "头发花白的大牛导师",
+      desc: "学院里人人都听过他的名字。办公室的门常年关着，据说他一年有大半时间在天上飞。",
+      stipend: 500,
+      mp: null,
+      ma: 0,
+      need: 5,
+      gw: 1,
+      bw: 1,
+      rescue: 70,
+      resMin: 70,
+      letter: 3,
+      tags: ["毕业要求：发一篇 CCF-A"],
+    },
+    {
+      id: "young",
+      req: "B",
+      name: "刚入职的青年导师",
+      desc: "比你大不了几岁，组里目前只有你一个学生。他办公室的灯总是楼里最晚灭的。",
+      stipend: 400,
+      mp: 8,
+      ma: 0.4,
+      need: 9.9,
+      gw: 1,
+      bw: 1.3,
+      rescue: 40,
+      resMin: 70,
+      letter: 1,
+      tags: ["毕业要求：发一篇 CCF-B"],
+    },
+    {
+      id: "nasty",
+      req: "A",
+      name: "项目很多的中年导师",
+      desc: "手上同时跑着好几个项目，电话一个接一个。师兄师姐提起他时，表情都有点复杂。",
+      stipend: 800,
+      mp: 2,
+      ma: 0,
+      need: 9.9,
+      gw: 1,
+      bw: 2,
+      rescue: 70,
+      resMin: 75,
+      letter: 2,
+      tags: ["毕业要求：发一篇 CCF-A"],
+    },
+    {
+      id: "kind",
+      req: "B",
+      name: "话不多的中年导师",
+      desc: "组不大，名气也不大。面试那天他只问了你一个问题，然后说：“来吧。”",
+      stipend: 400,
+      mp: 5,
+      ma: 0.2,
+      need: 5,
+      gw: 1.5,
+      bw: 1,
+      rescue: 60,
+      resMin: 75,
+      letter: 2,
+      tags: ["毕业要求：发一篇 CCF-B"],
+    },
+  ];
+  function sickOK(d) {
+    return !d.sick || S.a.health < 50;
+  }
+  function dailyEff(d) {
+    if (d.k !== "meet" || !S.mentor) return d.e;
+    const e = Object.assign({}, d.e);
+    e.progress = S.mentor.mp || 0;
+    if (S.mentor.ma) e.ability = S.mentor.ma;
+    else delete e.ability;
+    return e;
+  }
+  /* ================================================================
+   * 日常活动：每月四周里可以选的事，及其数值效果
+   * ================================================================ */
+  const DAILY = [
+    {
+      k: "meet",
+      g: "科研",
+      n: "找导师开小会",
+      e: { ability: 0.2, progress: 5, trust: 1, envy: 1, mood: -1, hair: -0.5 },
+    },
+    {
+      k: "read",
+      g: "科研",
+      n: "读论文",
+      e: { res: 1, ability: 0.2, progress: 5, mood: -1, hair: -0.5 },
+    },
+    {
+      k: "exp",
+      g: "科研",
+      n: "跑实验",
+      e: { ability: 0.3, progress: 5, health: -1, mood: -1, hair: -0.5 },
+    },
+    { k: "hx", g: "科研", n: "帮导师做横向", e: { money: 200, health: -2 } },
+    { k: "apply", g: "科研", n: "投简历", e: { mood: -1 }, y3: true },
+    { k: "dinner", g: "社交", n: "聚餐", e: { money: -100, rel: 3, mood: 1 } },
+    { k: "board", g: "社交", n: "桌游", e: { money: -60, rel: 1, mood: 3 } },
+    { k: "ktv", g: "社交", n: "KTV", e: { money: -80, mood: 4, rel: 2, health: -1 } },
+    { k: "treat", g: "社交", n: "请全组吃饭", e: { money: -200, envy: -2, rel: 2 } },
+    { k: "kind", g: "社交", n: "日行一善", e: { luck: 2 }, rnd: true },
+    { k: "sleep", g: "休养", n: "睡觉", e: { mood: 2, health: 2, hair: 1 } },
+    { k: "gym", g: "休养", n: "健身", e: { money: -50, res: 2, health: 2, hair: 1 } },
+    { k: "massage", g: "休养", n: "按摩", e: { money: -150, health: 4, mood: 1 } },
+    { k: "shop", g: "休养", n: "购物", e: { money: -100, mood: 2, hair: 1 } },
+    { k: "expo", g: "休养", n: "看展", e: { money: -80, res: 3, mood: 1 } },
+    { k: "travel", g: "休养", n: "旅游", e: { money: -500, mood: 6, res: 2, health: 2 } },
+    { k: "doctor", g: "休养", n: "看病", e: { money: -100, health: 6 }, sick: true },
+    { k: "hospital", g: "休养", n: "住院", e: { money: -300, health: 15, mood: -2 }, sick: true },
+  ];
+  const LIVING = 400,
+    LOVE = 200,
+    END_M = 34;
+  const T_M = [
+    "深度强化学习",
+    "图神经网络",
+    "大语言模型",
+    "扩散模型",
+    "对比学习",
+    "注意力机制",
+    "知识蒸馏",
+    "多智能体博弈",
+    "因果推断",
+    "小样本学习",
+    "自监督学习", 
+    "迁移学习",
+    "同态加密",
+    "联邦学习",
+    "差分隐私",
+    "区块链",
+    "安全多方计算",
+    "机器遗忘",
+    "图像分割",
+    "三维视觉",
+    "世界模型",
+    "异常检测",
+    "具身智能",
+  ];
+  const T_T = [
+    "食堂排队时长预测",
+    "食堂插队行为识别",
+    "导师情绪识别",
+    "组会时长估计",
+    "宿舍空调调度",
+    "奶茶销量预测",
+    "论文拒稿原因分析",
+    "发际线后移建模",
+    "外卖配送路径优化",
+    "校园猫咪轨迹追踪",
+    "实验室座位分配",
+    "选课系统抢课策略",
+    "快递驿站取件调度",
+    "图书馆空座预测",
+    "厕所排队时长预测",
+    "学术不端检测",
+    "食堂菜品推荐",
+    "宿舍热水器调度",
+    "快递到达时间预测",
+    "Wi-Fi 信号优化",
+    "外卖满减最优组合计算",
+    "摸鱼行为识别",
+    "今日午餐决策优化",
+  ];
+  const T_S = ["方法研究", "及其应用", "的再思考", "：一个新框架", "：理论与实践", "初探"];
+  function genTitle() {
+    return "基于" + T_M[rnd(T_M.length)] + "的" + T_T[rnd(T_T.length)] + T_S[rnd(T_S.length)];
+  }
+  const COMP = [
+    "飞象科技",
+    "蓝鲸智能",
+    "星环数据",
+    "北斗云图",
+    "青柠互娱",
+    "极光算力",
+    "麦田机器人",
+    "橘猫出行",
+    "山海智驾",
+    "云雀科技",
+    "白鹭金融科技",
+    "松果搜索",
+  ];
+  function startIntern(s, pre) {
+    const c = COMP[rnd(COMP.length)];
+    s.interns++;
+    s.internLeft = 3;
+    s.comps = (s.comps || []).concat([c]);
+    return (
+      (pre.indexOf("导师批了") === 0 ? "导师批了。" : "") +
+      "你去了「" +
+      c +
+      "」实习，为期三个月，每月固定占掉一件活动、发 200 工资。简历多了一段实习"
+    );
+  }
+  const FXNOTE = {
+    "collabpaper:0": "得到一篇 A 类合作论文的共同一作；同辈忮忌 50 以上时有四成概率被改成二作",
+    "collabpaper:1": "得到一篇 A 类合作论文的二作",
+    "grabfirst:0": "这篇论文变成共同一作",
+    "noopen:1": "一半概率作者回信，科研进展+3",
+    "game:0": "",
+    "nastycollab:0": "此后找导师开小会的科研进展从+2变成+6",
+    "check:0": "本月有科研进展则导师心腹+1；没有则心情-4、导师心腹-3",
+    "hello:0": "在审论文本次接收概率+10%",
+    "away:0": "下个月不开组会",
+    "dup:0": "论文退回一个阶段（还在文献综述阶段则改为科研进展-5）",
+    "dup:1": "40% 概率没找到差异点，论文退回一个阶段",
+    "badtopic:1": "50% 概率推不通，论文退回一个阶段",
+    "param:1": "40% 概率事后露馅，论文退回一个阶段",
+    "doubt:2": "论文退回一个阶段",
+    "steal:0": "这篇论文的一作署导师，求职和申博时效果打折",
+    "refer:0": "去一家公司实习三个月",
+    "gossip:0": "20% 概率被导师听见，导师心腹-5",
+    "cat:1": "20% 概率被挠，健康-2",
+    "crush:0": "获得对象",
+    "award:0": "有投过稿的论文则金钱+500",
+    "intern:0": "去一家公司实习三个月",
+    "intern:1": "去一家公司实习三个月",
+    "forcehx:0": "接下来三个月每月被派去做横向",
+    "kindreview:0": "在审论文本次接收概率+10%",
+  };
+  /* ================================================================
+   * 图片素材：结局、成就、事件配图（文件在 images/ 文件夹，路径写在这里）
+   * ================================================================ */
+  const ENDING_IMG = {
+    job: ["images/ending_job.webp", "images/ending_job_2.webp"],
+    bigco: ["images/ending_bigco.webp"],
+    home: ["images/ending_home.webp", "images/ending_home_2.webp"],
+    phdab: ["images/ending_phdab.webp"],
+    dead: ["images/ending_dead.webp"],
+    phdcn: ["images/ending_phdcn.webp"],
+  };
+  const ACH_IMG = {
+    hair: ["images/ach_hair.webp"],
+    stolen: ["images/ach_stolen.webp"],
+    rich: ["images/ach_rich.webp"],
+    owl: ["images/ach_owl.webp"],
+    bald: ["images/ach_bald.webp"],
+    social: ["images/ach_social.webp"],
+    travel: ["images/ach_travel.webp"],
+    gym: ["images/ach_gym.webp", "images/ach_gym_2.webp"],
+    kind: ["images/ach_kind.webp"],
+    love: ["images/ach_love.webp"],
+    moon: ["images/ach_moon.webp", "images/ach_moon_2.webp"],
+    free: ["images/ach_free.webp", "images/ach_free_2.webp"],
+    sleep: ["images/ach_sleep.webp"],
+  };
+  const EV_IMG = {
+    family: ["images/event_family.webp"],
+    snitch: ["images/event_snitch.webp", "images/event_snitch_2.webp"],
+    disk: ["images/event_disk.webp"],
+    gpu: ["images/event_gpu.webp"],
+    dinner2: ["images/event_dinner2.webp"],
+    praise: ["images/event_praise.webp"],
+    award: ["images/event_award.webp"],
+    peertreat: ["images/event_peertreat.webp"],
+    umbrella: ["images/event_umbrella.webp"],
+    gossip: ["images/event_gossip.webp"],
+    share: ["images/event_share.webp"],
+    milk: ["images/event_milk.webp", "images/event_milk_2.webp"],
+    hairloss: ["images/event_hairloss.webp"],
+    game: ["images/event_game.webp", "images/event_game_2.webp"],
+    phone: ["images/event_phone.webp", "images/event_phone_2.webp"],
+    crush: ["images/event_crush.webp"],
+    duck: ["images/event_duck.webp"],
+    cat: ["images/event_cat.webp"],
+  };
+  function evImgs(id) {
+    return EV_IMG[id]
+      ? '<span class="evimgs">' +
+          EV_IMG[id].map((u) => '<img alt="" src="' + u + '">').join("") +
+          "</span>"
+      : "";
+  }
+  function achImgs(id, cls) {
+    return (ACH_IMG[id] || [])
+      .map((u) => '<img class="' + cls + '" alt="" src="' + u + '">')
+      .join("");
+  }
+  const NAMES = [
+    "林深",
+    "周末",
+    "陈皮",
+    "宋词",
+    "江一苇",
+    "顾北",
+    "温如言",
+    "沈默",
+    "夏至",
+    "安然",
+    "白露",
+    "许愿",
+    "方圆",
+    "苏打",
+    "唐果",
+    "乔木",
+    "叶知秋",
+    "路遥",
+    "柯研",
+    "麦冬",
+    "时雨",
+    "闻笛",
+    "祝余",
+    "阮棠",
+  ];
+  /* ================================================================
+   * 论文规则与地图：论文档次与阶段、事件类别、36 格地图
+   * ================================================================ */
+  const PAPER = {
+    C: { cost: 10, ps: [90], rev: 0, mix: [6, 3, 1], trust: 3, envy: 2 },
+    B: { cost: 20, ps: [50], rev: 0, mix: [20, 18, 12], trust: 6, envy: 4 },
+    A: { cost: 40, ps: [20], rev: 0, mix: [25, 30, 25], trust: 12, envy: 8 },
+  };
+  const DOWN = { A: 1, B: 2, C: 3 };
+  const STAGES = ["定题", "文献综述", "算法", "实验", "写作"];
+  const NS = STAGES.length;
+  const CATS = { mentor: "导师", peer: "同门", research: "科研", life: "生活" };
+  const SCHEME_REQ = 25,
+    TRUST_REQ = 30;
+  const BOARD = [
+    "research",
+    "life",
+    "mentor",
+    "peer",
+    "research",
+    "peer",
+    "life",
+    "mentor",
+    "research",
+    "peer",
+    "mentor",
+    "peer",
+    "mentor",
+    "peer",
+    "life",
+    "mentor",
+    "life",
+    "mentor",
+    "peer",
+    "life",
+    "research",
+    "mentor",
+    "research",
+    "peer",
+    "research",
+    "mentor",
+    "research",
+    "mentor",
+    "peer",
+    "mentor",
+    "research",
+    "mentor",
+    "life",
+    "mentor",
+    "research",
+    "mentor",
+  ];
+  const TILE = { free: "安", mentor: "导", peer: "朋", research: "研", life: "活" };
+  const needScheme = { req: (s) => s.a.scheme >= SCHEME_REQ, reqT: "需要城府 " + SCHEME_REQ };
+  function workPaper(s, lo, hi) {
+    return s.papers
+      .filter((p) => p.status === "doing" && p.stage >= lo && p.stage <= hi && p.stage < NS)
+      .sort((a, b) => b.stage - a.stage)[0];
+  }
+  function regress(s, lo, hi) {
+    const p = workPaper(s, lo, hi);
+    if (!p) return "";
+    if (p.stage <= 1) {
+      s.a.progress = clamp(s.a.progress - 5);
+      return "题目要重新定，科研进展-5";
+    }
+    p.stage--;
+    return "论文 #" + p.id + " 退回到「" + STAGES[p.stage] + "」阶段";
+  }
+  /* ================================================================
+   * 事件库：随机事件（导师 / 同门 / 科研 / 生活）及开学前的问题。事件清单见《事件库》文档
+   * ================================================================ */
+  const EVENTS = [
+    {
+      id: "collabpaper",
+      c: "peer",
+      tone: "good",
+      n: "同门找你合作写论文",
+      d: "师兄手上有一篇冲 CCF-A 的论文，实验做不完了：“来搭把手？作者位置好商量。”",
+      cond: (s) => !s.papers.some((p) => p.collab && p.status !== "accepted"),
+      o: [
+        {
+          t: "全力投入，要共同一作",
+          e: { progress: -40 },
+          req: (s) => s.a.progress >= 40,
+          reqT: "需要科研进展 40",
+          r: "你把自己的进度先放下，陪着跑了一个月实验。",
+          fn: (s) => {
+            let role = "cofirst",
+              x = "";
+            if (s.a.envy >= 50 && Math.random() < 0.4) {
+              role = "second";
+              x = "投稿前，对方悄悄把你从共同一作改成了二作。";
+            }
+            const p = addCollab(s, role, 60);
+            return x + "你成了《" + p.title + "》的" + roleName(p) + "，下月初出结果";
+          },
+        },
+        {
+          t: "帮忙做点实验，挂个二作",
+          e: { progress: -20 },
+          req: (s) => s.a.progress >= 20,
+          reqT: "需要科研进展 20",
+          r: "举手之劳。",
+          fn: (s) => {
+            const p = addCollab(s, "second", 60);
+            return "你成了《" + p.title + "》的二作，下月初出结果";
+          },
+        },
+        { t: "婉拒", e: {}, r: "你自己的活还干不完。" },
+      ],
+    },
+    {
+      id: "grabfirst",
+      c: "peer",
+      tone: "bad",
+      n: "同门想要你论文的共同一作",
+      d: "“这篇我也帮你跑过实验，咱俩共一不过分吧？”",
+      cond: (s) =>
+        s.a.envy >= 40 &&
+        s.papers.some(
+          (p) =>
+            !p.collab &&
+            !p.stolen &&
+            (p.role || "first") === "first" &&
+            p.stage >= 3 &&
+            p.status !== "accepted",
+        ),
+      w: (s) => 1 + s.a.envy / 25,
+      o: [
+        {
+          t: "给他共同一作",
+          e: { rel: 2, envy: -3 },
+          r: "你在作者栏里加了一个星号。",
+          fn: (s) => {
+            const p = s.papers
+              .filter(
+                (x) =>
+                  !x.collab &&
+                  !x.stolen &&
+                  (x.role || "first") === "first" &&
+                  x.stage >= 3 &&
+                  x.status !== "accepted",
+              )
+              .sort((a, b) => DOWN[a.lv] - DOWN[b.lv])[0];
+            p.role = "cofirst";
+            return "论文 #" + p.id + " 变成了共同一作";
+          },
+        },
+        { t: "拒绝", e: { rel: -3, envy: 3 }, r: "他当场没说什么，后来见面不打招呼了。" },
+        Object.assign(
+          { t: "把他写进致谢", e: { rel: -1 }, r: "话说得客气，对方也不好再提。" },
+          needScheme,
+        ),
+      ],
+    },
+    {
+      id: "zotero",
+      c: "peer",
+      tone: "good",
+      n: "同门跟你分享了一个好用的文献整理工具",
+      d: "几百篇 PDF 终于有地方安置了。",
+      o: [{ t: "连夜整理", e: { progress: 2, res: 1, rel: 1 } }],
+    },
+    {
+      id: "latiao",
+      c: "peer",
+      tone: "good",
+      n: "同门分了你一包辣条",
+      d: "实验室里弥漫着一股熟悉的味道。",
+      o: [{ t: "一起吃", e: { mood: 2, rel: 1 } }],
+    },
+    {
+      id: "noopen",
+      c: "research",
+      tone: "bad",
+      n: "想复现的论文没有开源代码",
+      d: "论文里写着“代码将在接收后公开”，那已经是三年前的事了。",
+      o: [
+        {
+          t: "照着论文自己实现",
+          e: { progress: -3, ability: 2 },
+          r: "有两个超参数论文里压根没写，你试了一个星期。",
+        },
+        {
+          t: "发邮件问作者",
+          e: {},
+          r: "你写了一封很客气的英文邮件。",
+          fn: (s) => {
+            if (Math.random() < 0.5) {
+              s.a.progress = clamp(s.a.progress + 3);
+              return "作者居然回了，还附上了代码。科研进展+3";
+            }
+            return "石沉大海";
+          },
+        },
+        { t: "换一篇当 baseline", e: { progress: -2 }, r: "你默默把它从对比表里删掉了。" },
+      ],
+    },
+    {
+      id: "emptyrepo",
+      c: "research",
+      tone: "bad",
+      n: "GitHub 仓库是空的",
+      d: "README 里只有一行字：Code coming soon。这个 soon 已经持续了两年。",
+      o: [{ t: "点个 star 表示抗议", e: { mood: -2, progress: -2 } }],
+    },
+    {
+      id: "phone",
+      c: "life",
+      tone: "mid",
+      n: "熬夜玩手机",
+      d: "本来只想看十分钟，再抬头已经凌晨三点。",
+      o: [{ t: "放下手机", e: { mood: 2, health: -2, hair: -1 } }],
+    },
+    {
+      id: "game",
+      c: "life",
+      tone: "mid",
+      n: "通宵打游戏",
+      d: "室友喊你：“来不来？五排缺一个。”",
+      o: [
+        {
+          t: "通宵上分",
+          e: { mood: 4, health: -3, progress: -2 },
+          r: "天亮的时候你们终于赢了一把。",
+        },
+        { t: "打两把就睡", e: { mood: 2 }, r: "适可而止。" },
+        { t: "不打了，明天有组会", e: { res: 1 }, r: "你戴上了耳塞。" },
+      ],
+    },
+    {
+      id: "duck",
+      c: "life",
+      tone: "good",
+      n: "今天食堂的烧鸭饭真好吃",
+      d: "皮脆肉嫩，阿姨的手还没抖。",
+      o: [{ t: "再来一份", e: { mood: 2, health: 1 } }],
+    },
+    {
+      id: "nastycollab",
+      c: "mentor",
+      m: ["big","nasty"],
+      tone: "good",
+      n: "导师给你推荐了一个合作者",
+      d: "“我没空管你，你去找隔壁组的张老师，他做这个方向。”",
+      cond: (s) => !s.collab && s.month > 6,
+      w: () => WCOL,
+      o: [
+        {
+          t: "赶紧去联系他",
+          e: { rel: 1 },
+          fn: (s) => {
+            s.mentor.mp = 6;
+            s.mentor.ma = 0.2;
+            s.collab = true;
+            return "从此以后，找导师开小会（其实是找合作者讨论）的科研进展变成+6，自己摸索的效率也恢复正常";
+          },
+        },
+      ],
+    },
+    {
+      id: "check",
+      c: "mentor",
+      tone: "mid",
+      n: "导师突击查进度",
+      d: "导师突然出现在你身后：“你最近到底在干什么？”",
+      o: [
+        {
+          t: "汇报",
+          e: {},
+          fn: (s) =>
+            s.mprog > 0
+              ? "你把这个月做的东西讲了一遍，导师点了点头。" + applyEff({ trust: 1 }, true)
+              : "你支支吾吾讲不出东西。" + applyEff({ mood: -4, trust: -3 }, true),
+        },
+      ],
+    },
+    {
+      id: "milk",
+      c: "mentor",
+      tone: "good",
+      n: "导师请全组喝奶茶",
+      d: "群里弹出一条消息：“下午茶我请，自己点。”",
+      o: [{ t: "点最贵的", e: { mood: 2, rel: 1 } }],
+    },
+    {
+      id: "forgot",
+      c: "mentor",
+      m: ["big", "nasty", "kind"],
+      tone: "bad",
+      n: "导师忘了你叫什么",
+      d: "“那个……小王？”你不姓王。",
+      o: [{ t: "尴尬地笑笑", e: { mood: -2 } }],
+    },
+    {
+      id: "bro",
+      c: "mentor",
+      m: ["nasty"],
+      tone: "good",
+      n: "导师跟你称兄道弟",
+      d: "“来，今晚我请，咱哥俩喝一杯。”他今天心情好得不像同一个人。",
+      o: [{ t: "陪一杯", e: { trust: 3, mood: 2, health: -1 } }],
+    },
+    {
+      id: "redpack",
+      c: "mentor",
+      m: ["nasty"],
+      tone: "good",
+      n: "导师突然发红包",
+      d: "“上次那个项目结了，拿去花。”",
+      o: [{ t: "谢谢老师", e: { money: 300 } }],
+    },
+    {
+      id: "praise",
+      c: "mentor",
+      m: ["nasty"],
+      tone: "good",
+      n: "导师当众夸你",
+      d: "“你们都学学人家。”同门的目光齐刷刷扫过来。",
+      o: [{ t: "低头装没听见", e: { trust: 2, envy: 3 } }],
+    },
+    {
+      id: "oldscore",
+      c: "mentor",
+      m: ["nasty"],
+      tone: "bad",
+      n: "导师旧事重提",
+      d: "三个月前的一件小事，又被拿出来讲了半个小时。",
+      o: [{ t: "听着", e: { mood: -3 } }],
+    },
+    {
+      id: "scold",
+      c: "mentor",
+      m: ["nasty"],
+      tone: "bad",
+      n: "组会上被导师严厉批评",
+      d: "“这个结果还不太能拿得出手。”会议室里安静了好几秒。",
+      o: [
+        { t: "低头听着", e: { mood: -5 }, r: "你盯着桌面上的一道划痕看了十分钟。" },
+        { t: "当场解释", e: { trust: -5, res: 2 }, r: "导师皱了皱眉，没再说话。" },
+        Object.assign(
+          { t: "会后找他单聊", e: { trust: 1 }, r: "他语气缓和下来，说“下次注意”。" },
+          needScheme,
+        ),
+      ],
+    },
+    {
+      id: "weekend",
+      c: "mentor",
+      m: ["young"],
+      tone: "bad",
+      n: "导师拉你周末赶 deadline",
+      d: "“就差最后一组实验了，这周末辛苦一下。”",
+      o: [{ t: "通宵", e: { progress: 6, health: -3, mood: -2 } }],
+    },
+    {
+      id: "handson",
+      c: "mentor",
+      m: ["young"],
+      tone: "good",
+      n: "导师手把手带你改代码",
+      d: "他把椅子拉到你旁边，一行一行看下去。",
+      o: [{ t: "认真学", e: { ability: 2, progress: 5 } }],
+    },
+    {
+      id: "meetboss",
+      c: "mentor",
+      m: ["young"],
+      tone: "good",
+      n: "导师带你去见他的博士导师",
+      d: "“这是我带的第一个学生。”",
+      o: [{ t: "好好表现", e: { rel: 2, trust: 3 } }],
+    },
+    {
+      id: "tenure",
+      c: "mentor",
+      m: ["young"],
+      tone: "bad",
+      n: "导师评职称压力大",
+      d: "他最近眼圈很重，看谁的进度都不满意。",
+      o: [{ t: "躲着点", e: { mood: -2 } }],
+    },
+    {
+      id: "nudge",
+      c: "mentor",
+      m: ["kind"],
+      tone: "mid",
+      n: "导师温和地催进度",
+      d: "“不着急，但也别太不着急。”",
+      o: [{ t: "明白", e: { mood: -1, progress: 2 } }],
+    },
+    {
+      id: "care",
+      c: "mentor",
+      m: ["kind"],
+      tone: "good",
+      n: "导师问你生活上有没有困难",
+      d: "“钱够不够花？家里都还好吧？”",
+      o: [{ t: "心里一暖", e: { mood: 3 } }],
+    },
+    {
+      id: "collab",
+      c: "mentor",
+      m: ["kind"],
+      tone: "good",
+      n: "导师帮你介绍了一个合作者",
+      d: "隔壁组的博士后正好在做相关的东西。",
+      o: [{ t: "互加好友", e: { progress: 5, rel: 1 } }],
+    },
+    {
+      id: "away",
+      c: "mentor",
+      m: ["big"],
+      tone: "good",
+      n: "导师又出差了",
+      d: "动态定位显示他在另一个半球。",
+      o: [
+        {
+          t: "安心干活",
+          e: { mood: 2 },
+          fn: (s) => {
+            s.skipMeet = true;
+            return "下个月不开组会";
+          },
+        },
+      ],
+    },
+    {
+      id: "queue",
+      c: "mentor",
+      m: ["big"],
+      tone: "bad",
+      n: "学生太多排不上号",
+      d: "想找导师讨论，约了三周还没约上。",
+      o: [{ t: "继续等", e: { progress: -2 } }],
+    },
+    {
+      id: "dinner2",
+      c: "mentor",
+      m: ["big"],
+      tone: "good",
+      n: "导师在饭局上把你介绍给业内大佬",
+      d: "“这是我的学生，做得不错。”",
+      o: [{ t: "敬一杯", e: { rel: 3, trust: 2 } }],
+    },
+    {
+      id: "hello",
+      c: "mentor",
+      m: ["big"],
+      tone: "good",
+      n: "导师帮你润色了 rebuttal",
+      d: "你写的回复审稿意见被他改得滴水不漏，语气不卑不亢。",
+      cond: (s) => s.papers.some((p) => p.status === "submitted"),
+      o: [
+        {
+          t: "认真学",
+          e: {},
+          fn: (s) => {
+            const p = s.papers.find((x) => x.status === "submitted");
+            p.bonus = (p.bonus || 0) + 10;
+            return "论文 #" + p.id + " 这次的接收概率+10%";
+          },
+        },
+      ],
+    },
+    {
+      id: "senior",
+      c: "mentor",
+      m: ["big"],
+      tone: "mid",
+      n: "导师让大师兄代管",
+      d: "“以后具体的事，你们找大师兄。”",
+      o: [
+        { t: "抱紧师兄大腿", e: { rel: 2, progress: 3 }, r: "师兄把他踩过的坑都告诉了你。" },
+        { t: "自己摸索", e: { ability: 1 }, r: "慢是慢了点，但都是自己的。" },
+      ],
+    },
+    {
+      id: "dup",
+      c: "research",
+      tone: "bad",
+      n: "发现题目已经有人做过了",
+      d: "读文献读到一半，你翻到一篇去年的论文，标题和你的几乎一样。",
+      cond: (s) => !!workPaper(s, 1, 2),
+      w: () => 1.5,
+      o: [
+        { t: "换个题目重新来", e: { mood: -2 }, r: "长痛不如短痛。", fn: (s) => regress(s, 1, 2) },
+        {
+          t: "硬找差异点",
+          e: { progress: -4 },
+          r: "你把那篇论文逐字读了三遍。",
+          fn: (s) => (Math.random() < 0.4 ? regress(s, 1, 2) : "总算找到了一个它没做的角度"),
+        },
+        Object.assign(
+          { t: "请导师帮忙把关方向", e: { trust: 1 }, r: "导师三句话指出了还能做的口子。" },
+          needScheme,
+        ),
+      ],
+    },
+    {
+      id: "badtopic",
+      c: "research",
+      tone: "bad",
+      n: "做着做着发现这个题目不好",
+      d: "方法推到一半，你发现最初的假设根本不成立。",
+      cond: (s) => !!workPaper(s, 2, 3),
+      w: () => 1.5,
+      o: [
+        { t: "调整思路继续做", e: { progress: -5 }, r: "之前的推导有一半用不上了。" },
+        {
+          t: "硬着头皮往下推",
+          e: { mood: -4 },
+          r: "你假装没看见那个漏洞。",
+          fn: (s) => (Math.random() < 0.5 ? regress(s, 2, 3) : "居然推通了"),
+        },
+      ],
+    },
+    {
+      id: "param",
+      c: "research",
+      tone: "bad",
+      n: "发现实验有个参数设错了",
+      d: "学习率多写了一个零，之前三周的实验全是在这个设置下跑的。",
+      cond: (s) => !!workPaper(s, 3, 3),
+      w: () => 1.5,
+      o: [
+        { t: "全部重做", e: { progress: -6, luck: 1 }, r: "服务器又转了起来。" },
+        {
+          t: "只补几个关键实验",
+          e: { progress: -2, luck: -2 },
+          r: "你安慰自己影响不大。",
+          fn: (s) => (Math.random() < 0.4 ? regress(s, 3, 3) : "结果趋势没变，蒙混过去了"),
+        },
+      ],
+    },
+    {
+      id: "stuck",
+      c: "research",
+      tone: "bad",
+      n: "论文写不下去了",
+      d: "Introduction 的第一句话，你已经改了十一遍。",
+      cond: (s) => !!workPaper(s, 4, 4),
+      w: () => 1.5,
+      o: [
+        { t: "硬着头皮写", e: { mood: -5 }, r: "字是一个一个抠出来的。" },
+        {
+          t: "放一放，出去散散心",
+          e: { mood: 2, progress: -4 },
+          r: "回来的时候，文档还停在那一行。",
+        },
+      ],
+    },
+    {
+      id: "doubt",
+      c: "research",
+      tone: "bad",
+      n: "写着写着开始怀疑人生",
+      d: "凌晨两点，你盯着屏幕想：我做的这个东西，到底有什么意义？",
+      cond: (s) => !!workPaper(s, 3, 4),
+      w: () => 1.5,
+      o: [
+        { t: "找同门聊聊", e: { rel: 1, mood: 1 }, r: "原来大家都这么想过。" },
+        { t: "一个人扛着", e: { mood: -5, res: 1 }, r: "天亮了，你还是打开了文档。" },
+        {
+          t: "干脆推翻重写",
+          e: { ability: 1 },
+          r: "你删掉了整整一章。",
+          fn: (s) => regress(s, 3, 4),
+        },
+      ],
+    },
+    {
+      id: "forcehx",
+      c: "mentor",
+      m: ["nasty", "big"],
+      tone: "bad",
+      n: "导师派你去做横向",
+      d: "“甲方下周要验收，你先把手上的事放一放。”",
+      cond: (s) => !s.hxLeft,
+      o: [
+        {
+          t: "好的老师",
+          e: {},
+          fn: (s) => {
+            s.hxLeft = 3;
+            return "接下来三个月，每月固定占掉一件活动去做横向，每月金钱+200、健康-2";
+          },
+        },
+      ],
+    },
+    {
+      id: "ppt",
+      c: "mentor",
+      m: ["big", "nasty"],
+      tone: "mid",
+      n: "导师让你帮他做 PPT",
+      d: "“明天有个汇报，你帮我把这二十页美化一下。”",
+      o: [
+        {
+          t: "认真做，连动画都调了",
+          e: { trust: 3, health: -2, progress: -2 },
+          r: "导师在台上讲得很顺，一个字没提你。",
+        },
+        { t: "套个模板交差", e: { trust: -1 }, r: "导师看了一眼，说“行吧”。" },
+      ],
+    },
+    {
+      id: "pie",
+      c: "mentor",
+      m: ["nasty", "young"],
+      tone: "mid",
+      n: "导师画饼",
+      d: "“好好干，明年送你出国交流。”",
+      o: [
+        {
+          t: "信了，更卖力",
+          e: { progress: 3, mood: 2, health: -2 },
+          r: "你干劲十足地熬了几个夜。",
+        },
+        { t: "听听就好", e: { res: 1 }, r: "这话你去年也听过。" },
+      ],
+    },
+    {
+      id: "mentee",
+      c: "mentor",
+      tone: "mid",
+      n: "导师让你带师弟师妹的课题",
+      d: "“他们刚进组，你多带带。”",
+      cond: (s) => s.month > 12,
+      o: [
+        { t: "接下来", e: { trust: 3, rel: 2, progress: -3 }, r: "你的时间被切成了一小块一小块。" },
+        Object.assign(
+          { t: "委婉推掉", e: {}, r: "你说手上的论文正到关键阶段，导师没再坚持。" },
+          needScheme,
+        ),
+        { t: "直接说没空", e: { trust: -3 }, r: "导师“哦”了一声。" },
+      ],
+    },
+    {
+      id: "pivot",
+      c: "mentor",
+      m: ["young", "nasty"],
+      tone: "bad",
+      n: "导师建议你临时改方向",
+      d: "“我昨晚想了想，你这个方向没前途，换一个吧。”",
+      o: [
+        { t: "听导师的", e: { progress: -8, trust: 3 }, r: "之前的积累用不上了。" },
+        { t: "坚持原方向", e: { trust: -4, res: 2 }, r: "你决定把这条路走到底。" },
+      ],
+    },
+    {
+      id: "recommend",
+      c: "mentor",
+      m: ["kind", "big"],
+      tone: "good",
+      n: "导师推荐你申奖学金",
+      d: "名额只有一个，导师把你的名字报了上去。",
+      cond: (s) => s.a.trust >= 40,
+      o: [{ t: "谢谢老师", e: { money: 500, envy: 3 } }],
+    },
+    {
+      id: "polish",
+      c: "mentor",
+      m: ["young", "kind"],
+      tone: "good",
+      n: "导师帮你逐句改论文",
+      d: "返回的文档里全是红色批注。",
+      cond: (s) => s.papers.length > 0,
+      o: [{ t: "认真学", e: { ability: 2, progress: 5 } }],
+    },
+    {
+      id: "lucky",
+      c: "research",
+      tone: "good",
+      n: "意外跑出一个好结果",
+      d: "调参调到凌晨，随手改了一个数，指标突然涨了三个点。",
+      o: [{ t: "赶紧保存", e: { progress: 10, mood: 3 } }],
+    },
+    {
+      id: "issue",
+      c: "research",
+      tone: "good",
+      n: "开源社区有人回复了你的 issue",
+      d: "卡了两周的报错，被一个陌生人三句话解决了。",
+      o: [{ t: "感谢大佬", e: { progress: 4, ability: 1 } }],
+    },
+    {
+      id: "kindreview",
+      c: "research",
+      tone: "good",
+      n: "审稿意见很友善",
+      d: "三个审稿人，没有一个是 Reviewer 2。",
+      cond: (s) => s.papers.some((p) => p.status === "submitted"),
+      o: [
+        {
+          t: "松了口气",
+          e: { mood: 3 },
+          fn: (s) => {
+            const p = s.papers.find((x) => x.status === "submitted");
+            p.bonus = 10;
+            return "论文 #" + p.id + " 这次的接收概率+10%";
+          },
+        },
+      ],
+    },
+    {
+      id: "server",
+      c: "research",
+      tone: "good",
+      n: "组里买了新服务器",
+      d: "八张卡，暂时还没人抢。",
+      o: [{ t: "先占上", e: { progress: 5, mood: 2 } }],
+    },
+    {
+      id: "dataset",
+      c: "research",
+      tone: "good",
+      n: "发现一个现成的数据集",
+      d: "正好是你需要的任务，还带标注。",
+      o: [
+        { t: "直接用", e: { progress: 6 }, r: "省了一个月的标注时间。" },
+        {
+          t: "自己再清洗一遍",
+          e: { progress: 3, ability: 1 },
+          r: "你发现了几处标注错误，心里踏实多了。",
+        },
+      ],
+    },
+    {
+      id: "bug",
+      c: "research",
+      tone: "bad",
+      n: "代码里发现一个隐藏很久的 bug",
+      d: "之前所有的实验结果，可能都是错的。",
+      o: [
+        {
+          t: "老实重跑所有实验",
+          e: { progress: -6, ability: 2, luck: 2 },
+          r: "结果掉了一点，但这回是真的。",
+        },
+        { t: "假装没看见", e: { res: -2, luck: -3 }, r: "你关掉了那个文件。" },
+      ],
+    },
+    {
+      id: "junior",
+      c: "peer",
+      tone: "good",
+      n: "师弟师妹来问科研问题",
+      d: "“师兄师姐，我这个 loss 怎么一直不降啊？”",
+      cond: (s) => s.month > 12,
+      o: [
+        {
+          t: "耐心讲清楚",
+          e: { luck: 3, rel: 2, progress: -2 },
+          r: "讲着讲着，你自己也想明白了一些东西。",
+        },
+        { t: "丢个链接让他自己看", e: { luck: 1 }, r: "也算是帮了忙。" },
+        { t: "说自己很忙", e: { luck: -2, rel: -1 }, r: "对方讪讪地走了。" },
+      ],
+    },
+    {
+      id: "card",
+      c: "life",
+      tone: "good",
+      n: "捡到一张校园卡",
+      d: "食堂门口的地上躺着一张饭卡，里面还有两百多块。",
+      o: [
+        { t: "送到失物招领", e: { luck: 3 }, r: "失主后来在表白墙上感谢了你。" },
+        { t: "假装没看见", e: {}, r: "你绕了过去。" },
+        { t: "拿去食堂刷了几顿饭", e: { money: 100, luck: -5 }, r: "饭是香的，心里有点虚。" },
+      ],
+    },
+    {
+      id: "umbrella",
+      c: "life",
+      tone: "good",
+      n: "下雨天",
+      d: "教学楼门口，一个不认识的同学没带伞，正对着大雨发愁。",
+      o: [
+        { t: "顺路送一程", e: { luck: 2, rel: 1 }, r: "对方连说了三声谢谢。" },
+        { t: "自己先走了", e: {}, r: "雨下得更大了。" },
+        {
+          t: "顺手拿走门口一把没人看着的伞",
+          e: { luck: -4, mood: 1 },
+          r: "你没淋到雨，有人淋到了。",
+        },
+      ],
+    },
+    {
+      id: "steal",
+      c: "mentor",
+      m: ["nasty"],
+      tone: "bad",
+      n: "导师想调整论文的作者顺序",
+      d: "“这篇的思路我出了不少力，一作署我，你挂二作，对你以后也有好处。”",
+      cond: (s) => s.papers.some((p) => !p.stolen && !p.collab && p.stage >= NS),
+      o: [
+        {
+          t: "同意",
+          e: { trust: 8, mood: -5 },
+          r: "导师拍了拍你的肩膀。",
+          fn: (s) => {
+            const p = s.papers
+              .filter((x) => !x.stolen && !x.collab && x.stage >= NS)
+              .sort((a, b) => DOWN[a.lv] - DOWN[b.lv])[0];
+            p.stolen = true;
+            return "论文 #" + p.id + " 的一作署了导师，以后找工作和申博时这篇的效果打折";
+          },
+        },
+        { t: "婉拒", e: { trust: -8, mood: 2 }, r: "导师有点不高兴，但论文还是你的。" },
+        Object.assign(
+          {
+            t: "提议共同一作",
+            e: { trust: 2, scheme: 3 },
+            r: "你把话说得很漂亮，导师居然同意了。",
+          },
+          needScheme,
+        ),
+      ],
+    },
+    {
+      id: "peertreat",
+      c: "peer",
+      tone: "good",
+      n: "同门请客吃饭",
+      d: "师兄发了论文，请全组吃烧烤。",
+      o: [{ t: "去吃", e: { mood: 2, rel: 2 } }],
+    },
+    {
+      id: "gossip",
+      c: "peer",
+      tone: "mid",
+      n: "同门约你一起吐槽导师",
+      d: "奶茶店角落里，三个人压低了声音。",
+      o: [
+        {
+          t: "一起吐槽个痛快",
+          e: { mood: 4, rel: 2 },
+          r: "吐槽完神清气爽。",
+          fn: (s) => {
+            if (Math.random() < 0.2) {
+              s.a.trust = clamp(s.a.trust - 5);
+              return "不巧被导师听见了，导师心腹-5";
+            }
+            return "";
+          },
+        },
+        { t: "默默听着", e: { rel: 1 }, r: "你负责点头和续杯。" },
+        { t: "替导师说两句好话", e: { rel: -2, scheme: 1 }, r: "气氛突然有点尴尬。" },
+      ],
+    },
+    {
+      id: "treat",
+      c: "mentor",
+      m: ["kind", "big", "nasty"],
+      tone: "good",
+      n: "导师请客吃饭",
+      d: "导师心情不错，带全组下馆子。",
+      o: [{ t: "敞开吃", e: { health: 2, mood: 2 } }],
+    },
+    {
+      id: "trip",
+      c: "mentor",
+      tone: "good",
+      n: "导师出差两周",
+      d: "办公室的空气突然清新了。",
+      o: [{ t: "太好了", e: { mood: 3, health: 2 } }],
+    },
+    {
+      id: "grant",
+      c: "mentor",
+      m: ["big", "nasty"],
+      tone: "good",
+      n: "导师拿到大项目",
+      d: "人人有份，活儿也人人有份。",
+      o: [{ t: "收下", e: { money: 200, health: -2 } }],
+    },
+    {
+      id: "attack",
+      c: "mentor",
+      m: ["nasty", "young"],
+      tone: "bad",
+      n: "导师组会上连连追问",
+      d: "“这周的进展能再具体一点吗？”全组安静。",
+      o: [
+        { t: "认真解释", e: { ability: 1, mood: 2, trust: -3 } },
+        { t: "低头认错，回去改", e: { mood: -3, progress: 3 } },
+        Object.assign({ t: "会后单独找导师沟通", e: { trust: 2 } }, needScheme),
+      ],
+    },
+    {
+      id: "midnight",
+      c: "mentor",
+      m: ["nasty", "young"],
+      tone: "bad",
+      n: "导师深夜发消息问进度",
+      d: "手机亮了：“在吗？”",
+      o: [
+        { t: "秒回并汇报", e: { trust: 3, health: -2, mood: -2 } },
+        { t: "装睡，明早再回", e: { mood: 1, trust: -1 } },
+      ],
+    },
+    {
+      id: "invoice",
+      c: "mentor",
+      tone: "mid",
+      n: "导师让你帮忙贴发票报销",
+      d: "一沓皱巴巴的出租车票。",
+      o: [
+        { t: "认真贴完", e: { trust: 2, mood: -2 } },
+        { t: "推给师弟师妹", e: { rel: -2, scheme: 3, luck: -1 } },
+      ],
+    },
+    {
+      id: "undergrad",
+      c: "mentor",
+      tone: "mid",
+      n: "导师让你带本科生毕设",
+      d: "本科生问你：“学长学姐，Python 怎么装？”",
+      o: [
+        { t: "认真带", e: { rel: 2, progress: -3 } },
+        { t: "放养", e: { trust: -1, luck: -2 } },
+      ],
+    },
+    {
+      id: "share",
+      c: "peer",
+      tone: "good",
+      n: "师兄师姐分享代码和数据",
+      d: "省了你两周的重复劳动。",
+      o: [{ t: "感恩", e: { progress: 5, rel: 1 } }],
+    },
+    {
+      id: "refer",
+      c: "peer",
+      tone: "good",
+      n: "同门给你推荐实习",
+      d: "人缘好就是不一样，师姐直接内推了你。",
+      cond: (s) => s.a.rel >= 60 && s.interns < 2 && !s.internLeft,
+      o: [
+        { t: "去实习", e: {}, fn: (s) => startIntern(s, "实习三个") },
+        { t: "谢过，暂时不去", e: {} },
+      ],
+    },
+    {
+      id: "coauthor",
+      c: "peer",
+      tone: "mid",
+      n: "同门想在你的论文上挂名",
+      d: "“就挂个名，不影响你一作。”",
+      cond: (s) => s.papers.length > 0,
+      o: [
+        { t: "同意", e: { rel: 3, envy: -3 } },
+        { t: "拒绝", e: { rel: -2, envy: 2 } },
+      ],
+    },
+    {
+      id: "snitch",
+      c: "peer",
+      tone: "bad",
+      n: "同门在导师面前告你的状",
+      d: "说你天天摸鱼、抢别人的想法。",
+      w: (s) => 1 + s.a.envy / 25,
+      o: [
+        { t: "当面对质", e: { rel: -3, trust: -2 } },
+        { t: "忍了", e: { mood: -3, trust: -2, scheme: 3 } },
+        Object.assign(
+          { t: "留好证据，私下澄清", e: { trust: 1, envy: -2, scheme: 3 } },
+          needScheme,
+        ),
+      ],
+    },
+    {
+      id: "gpu",
+      c: "peer",
+      tone: "bad",
+      n: "服务器 GPU 被同门占满",
+      d: "nvidia-smi 一片红。",
+      o: [
+        { t: "半夜爬起来抢", e: { progress: 3, health: -3 } },
+        { t: "干等", e: { progress: -2 } },
+        { t: "自费租云服务器", e: { money: -200, progress: 3 } },
+        { t: "悄悄停掉别人的任务", e: { progress: 5, luck: -3, envy: 2 } },
+      ],
+    },
+    {
+      id: "idea",
+      c: "research",
+      tone: "good",
+      n: "洗澡时想出了新 idea",
+      d: "你一边洗澡一边唱歌，副歌还没唱完，卡了两周的思路突然通了。",
+      o: [{ t: "赶紧记下来", e: { progress: 8 } }],
+    },
+    {
+      id: "review",
+      c: "research",
+      tone: "mid",
+      n: "帮导师审稿",
+      d: "署名是导师，干活是你。",
+      o: [
+        { t: "认真审完", e: { ability: 2, health: -1 }, r: "你写了整整两页意见。" },
+        {
+          t: "扫一眼摘要就给拒稿",
+          e: { mood: 1, luck: -3 },
+          r: "十分钟搞定。某个同行的三个月白等了。",
+        },
+      ],
+    },
+    {
+      id: "repro",
+      c: "research",
+      tone: "bad",
+      n: "实验结果突然复现不出来",
+      d: "上周还好好的。",
+      o: [{ t: "重新排查", e: { progress: -5, mood: -3 } }],
+    },
+    {
+      id: "arxiv",
+      c: "research",
+      tone: "bad",
+      n: "arXiv 上刚挂出一篇和你撞 idea 的论文",
+      d: "连图都长得像。",
+      o: [
+        { t: "换方向", e: { progress: -8, ability: 2 } },
+        { t: "硬着头皮做差异化", e: { mood: -3, ability: 1 } },
+        { t: "当作没看见，也不引用它", e: { luck: -3, res: -1 } },
+      ],
+    },
+    {
+      id: "disk",
+      c: "research",
+      tone: "bad",
+      n: "硬盘坏了，没备份",
+      d: "咔哒，咔哒，咔哒。",
+      o: [
+        { t: "花钱恢复数据", e: { money: -200 } },
+        { t: "重跑", e: { progress: -5, mood: -2 } },
+      ],
+    },
+    {
+      id: "cat",
+      c: "life",
+      tone: "good",
+      n: "偶遇校园流浪猫",
+      d: "一只橘猫蹲在图书馆门口看着你。",
+      o: [
+        { t: "花钱喂它一点猫粮", e: { money: -50, luck: 2, mood: 2 } },
+        {
+          t: "摸一下",
+          e: { mood: 2 },
+          fn: (s) => {
+            if (Math.random() < 0.2) {
+              s.a.health = clamp(s.a.health - 2);
+              return "被挠了一爪子，健康-2";
+            }
+            return "";
+          },
+        },
+        { t: "不管，直接走掉", e: {} },
+      ],
+    },
+    {
+      id: "crush",
+      c: "life",
+      tone: "good",
+      n: "有人对你心动",
+      d: "大概是因为你头发还挺多。有对象的话每个月心情都会好一点。约会、送礼、旅游在每月的活动页里，只花钱、不占活动次数；连续两个月不互动，对方会提分手。",
+      cond: (s) => s.a.hair > 70 && !s.partner && !s.ex,
+      o: [
+        {
+          t: "在一起",
+          e: {},
+          fn: (s) => {
+            s.partner = true;
+            s.noDate = 0;
+            return "你有对象了，日常页多了「对象」入口";
+          },
+        },
+        { t: "婉拒", e: {} },
+      ],
+    },
+    {
+      id: "award",
+      c: "life",
+      tone: "good",
+      n: "学校评奖学金",
+      d: "评审只看有没有论文。",
+      o: [
+        {
+          t: "看结果",
+          e: {},
+          fn: (s) => {
+            if (s.papers.some((p) => p.subs > 0)) {
+              s.money += 500;
+              return "有论文在手，拿到 500 元";
+            }
+            return "没有投出去的论文，与你无关";
+          },
+        },
+      ],
+    },
+    {
+      id: "conf",
+      c: "life",
+      tone: "good",
+      n: "出差开学术会议",
+      d: "公费旅游，顺便做个报告。",
+      cond: (s) => s.papers.some((p) => p.status === "accepted"),
+      o: [{ t: "出发", e: { mood: 5, rel: 2 } }],
+    },
+    {
+      id: "intern",
+      c: "life",
+      tone: "mid",
+      n: "大厂实习邀请",
+      d: "HR 问你什么时候能到岗。实习一般是三个月。",
+      cond: (s) => s.interns < 2 && !s.internLeft,
+      o: [
+        { t: "瞒着导师偷偷去", e: { trust: -5 }, fn: (s) => startIntern(s, "实习三个") },
+        {
+          t: "征求导师同意",
+          e: {},
+          req: (s) => s.a.trust >= TRUST_REQ,
+          reqT: "需要导师心腹 " + TRUST_REQ,
+          fn: (s) => startIntern(s, "导师批了"),
+        },
+        { t: "放弃", e: {} },
+      ],
+    },
+    {
+      id: "hairloss",
+      c: "life",
+      tone: "bad",
+      n: "洗头时掉了一大把头发",
+      d: "下水道又堵了。",
+      o: [{ t: "默默清理", e: { hair: -3, mood: -2 } }],
+    },
+    {
+      id: "cold",
+      c: "life",
+      tone: "bad",
+      n: "换季感冒",
+      d: "全实验室轮流咳嗽。",
+      o: [{ t: "多喝热水", e: { health: -3 } }],
+    },
+    {
+      id: "family",
+      c: "life",
+      tone: "bad",
+      n: "家里打电话",
+      d: "“什么时候毕业？有没有对象？”",
+      o: [{ t: "嗯嗯好的", e: { mood: -3 } }],
+    },
+    {
+      id: "offer",
+      c: "life",
+      tone: "bad",
+      n: "本科同学晒大厂 offer",
+      d: "动态里人人都在入职。",
+      o: [{ t: "点个赞", e: { mood: -3 } }],
+    },
+  ];
+  /* ================================================================
+   * 结局文案
+   * ================================================================ */
+  const ENDINGS = {
+    dead: [
+      "原地飞升",
+      "健康归零。你在工位上眼前一白，原地飞升了。论文还停在第三章，身体才是革命的本钱。",
+    ],
+    quit: ["退学了", "你交了退学申请，走出校门的那一刻，天很蓝。"],
+    rest: ["休学", "心情归零，你决定先休学一段时间，好好休息。"],
+    fail: ["结业", "延毕了两次，还是没能同时过学校和导师的毕业要求，最终只拿到结业证。"],
+    bigco: ["毕业，入职大厂", "简历上有实打实的好论文，你拿到了大厂 offer。"],
+    job: ["毕业，找到工作", "凭着实习和项目经历，你找到了一份不错的工作。"],
+    home: ["毕业即失业，回家啃老", "简历投了两百份，没有回音。先回家歇一歇吧。"],
+    phdcn: ["毕业，国内读博", "新的四年开始了。"],
+    phdab: ["毕业，海外读博", "你拖着三个行李箱，飞向了下一个实验室。"],
+  };
+
+  /* ================================================================
+   * 基础工具函数与游戏状态（S 是当前这一局，存档在 localStorage）
+   * ================================================================ */
+  function clamp(v) {
+    return Math.max(0, Math.min(100, v));
+  }
+  function rnd(n) {
+    return Math.floor(Math.random() * n);
+  }
+  function sign(v) {
+    return (v > 0 ? "+" : "") + v;
+  }
+  function esc(s) {
+    return String(s).replace(
+      /[&<>"']/g,
+      (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
+    );
+  }
+  function newState() {
+    return {
+      screen: "welcome",
+      name: "",
+      a: {},
+      wealth: 0,
+      money: 0,
+      mentor: null,
+      stu: -1,
+      men: -1,
+      month: 1,
+      week: 1,
+      step: "daily",
+      pos: 0,
+      dice: 0,
+      ev: null,
+      lastEv: null,
+      result: "",
+      papers: [],
+      pid: 0,
+      partner: false,
+      noDate: 0,
+      dates: 0,
+      cnt: {},
+      hx: 0,
+      interns: 0,
+      ext: 0,
+      defended: false,
+      notices: [],
+      crisis: null,
+      warned: false,
+      modal: null,
+      log: [],
+      ending: null,
+      transfers: 0,
+      qres: null,
+      mprog: 0,
+      plan: [],
+      lastPlan: [],
+      ask: null,
+      applies: 0,
+      tot: {},
+      rejTotal: 0,
+      broke: 0,
+      nights: 0,
+      blind: 0,
+      pick: [],
+      yearAcc: 0,
+      ex: false,
+      internLeft: 0,
+      fixed: [],
+      note: "",
+    };
+  }
+  let S = newState();
+  function load() {
+    try {
+      const t = localStorage.getItem(KEY);
+      return t ? JSON.parse(t) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  function save() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(S));
+    } catch (e) {}
+  }
+  function wipe() {
+    try {
+      localStorage.removeItem(KEY);
+    } catch (e) {}
+  }
+
+  /* ================================================================
+   * 规则：属性换算、科研进展折扣、效果结算
+   * ================================================================ */
+  function resFactor() {
+    const r = S.a.res;
+    return r < 30 ? 1.5 : r >= 70 ? 0.5 : 1;
+  }
+  const NASTY_F = 0.55,
+    WCOL = 0.7;
+  function lowF() {
+    const n = (S.a.mood < 30 ? 1 : 0) + (S.a.health < 30 ? 1 : 0);
+    return n === 2 ? 1 / 3 : n === 1 ? 0.5 : 1;
+  }
+  // 选项上显示的真实数值：科研进展按加成和折扣算，超过 70 的属性加分减半
+  function realEff(e) {
+    const r = {};
+    for (const k in e) {
+      let v = e[k];
+      if (k === "progress" && v > 0) v = gainProg(v);
+      else if (v > 0 && k !== "money" && k !== "envy" && k !== "progress" && S.a[k] > 70)
+        v = Math.round(v * 5) / 10;
+      r[k] = v;
+    }
+    return r;
+  }
+  function gainProg(v) {
+    return Math.max(
+      1,
+      Math.round(
+        (v + Math.floor(S.a.ability / 20)) *
+          lowF() *
+          (S.mentor && S.mentor.id === "nasty" && !S.collab ? NASTY_F : 1),
+      ),
+    );
+  }
+  function applyEff(e, isEvent) {
+    const out = [];
+    for (const k in e) {
+      let v = e[k];
+      if (k === "money") {
+        S.money = v > 0 ? S.money + v : Math.max(Math.min(S.money, 0), S.money + v);
+        out.push("金钱" + sign(v));
+        continue;
+      }
+      if (k === "progress" && v > 0) {
+        v = gainProg(v);
+        S.mprog = (S.mprog || 0) + v;
+      }
+      if (k === "mood" && v < 0 && isEvent) v = Math.round(v * resFactor());
+      if (v > 0 && k !== "progress" && k !== "envy" && S.a[k] > 70) v = v / 2;
+      const old = S.a[k];
+      S.a[k] = clamp(old + v);
+      out.push(LBL[k] + sign(Math.round((S.a[k] - old) * 10) / 10));
+    }
+    return out.join("，");
+  }
+  function effText(e) {
+    return Object.keys(e)
+      .map((k) => LBL[k] + sign(e[k]))
+      .join(" ");
+  }
+  function canPay(e) {
+    return !(e.money < 0 && S.money < -e.money);
+  }
+  function yearNo(m) {
+    return m <= 11 ? 1 : m <= 23 ? 2 : 3;
+  }
+  function yearSnap() {
+    S.ys = {
+      a: Object.assign({}, S.a),
+      money: S.money,
+      hx: S.hx,
+      interns: S.interns,
+      tot: Object.assign({}, S.tot),
+      acc: S.papers.filter((p) => p.status === "accepted").length,
+    };
+  }
+  function yearPage() {
+    const b = S.ys || { a: S.a, money: S.money, hx: S.hx, interns: S.interns, tot: {}, acc: 0 };
+    const row = (n, x, y) => {
+      const d = Math.round(y) - Math.round(x);
+      return (
+        "<span>" +
+        n +
+        "</span><b>" +
+        Math.round(x) +
+        " → " +
+        Math.round(y) +
+        '</b><em class="' +
+        (d > 0 ? "up" : d < 0 ? "dn" : "") +
+        '">' +
+        (d > 0 ? "+" + d : d < 0 ? "−" + -d : "持平") +
+        "</em>"
+      );
+    };
+    let h =
+      '<div class="ygrid">' +
+      ["health", "mood", "res", "hair", "rel", "scheme", "luck", "ability", "trust", "envy"]
+        .map((k) => row(LBL[k], b.a[k] || 0, S.a[k]))
+        .join("") +
+      row("金钱", b.money, S.money) +
+      "</div>";
+    const own = S.papers.filter((p) => !p.collab),
+      acc = S.papers.filter((p) => p.status === "accepted").length - b.acc;
+    const st = (p) =>
+      p.status === "accepted"
+        ? "已接收"
+        : p.status === "submitted"
+          ? "在审"
+          : p.status === "rejected"
+            ? "被拒，待处理"
+            : p.stage >= NS
+              ? "写完待投"
+              : p.stage > 0
+                ? "做到「" + STAGES[p.stage - 1] + "」"
+                : "刚立项";
+    h +=
+      "<p><b>论文</b>：这一年接收了 " +
+      Math.max(0, acc) +
+      " 篇。" +
+      (S.papers.length
+        ? S.papers.map((p) => "《" + esc(p.title) + "》CCF-" + p.lv + "，" + st(p)).join("；") +
+          "。"
+        : "手上还没有论文。") +
+      "<br>导师的毕业要求是一篇 CCF-" +
+      reqLv() +
+      (reqOK() ? "，已经满足。" : "，还没有满足。") +
+      "</p>";
+    const top = DAILY.map((d) => [d.n, (S.tot[d.k] || 0) - (b.tot[d.k] || 0)])
+      .filter((x) => x[1] > 0)
+      .sort((x, y) => y[1] - x[1])
+      .slice(0, 3);
+    if (top.length)
+      h +=
+        "<p><b>做得最多的事</b>：" +
+        top.map((x) => x[0] + " " + x[1] + " 次").join("，") +
+        "。</p>";
+    const hx = S.hx - b.hx,
+      it = S.interns - b.interns;
+    if (hx > 0 || it > 0)
+      h +=
+        "<p><b>经历</b>：" +
+        [hx > 0 ? "横向 " + hx + " 次" : "", it > 0 ? "实习 " + it + " 段" : ""]
+          .filter(Boolean)
+          .join("，") +
+        "。</p>";
+    return h;
+  }
+  function dateStr(m) {
+    const y = m > END_M ? 4 : yearNo(m);
+    return ["研一", "研二", "研三", "延毕"][y - 1] + " " + (((m + 7) % 12) + 1) + " 月";
+  }
+  function log(t) {
+    S.log.push(dateStr(S.month) + " · " + t);
+    if (S.log.length > 40) S.log.shift();
+  }
+  function notice(t, x) {
+    S.notices.push({ t: t, x: x });
+  }
+  /* ================================================================
+   * 跨局记录：结局、事件图鉴、成就、历史（存在 M，与单局存档分开）
+   * ================================================================ */
+  const MKEY = "yanmo_meta_v1";
+  let M = { endings: {}, events: {}, ach: {}, runs: [] };
+  function loadMeta() {
+    try {
+      const t = localStorage.getItem(MKEY);
+      if (t) {
+        const m = JSON.parse(t);
+        M = {
+          endings: m.endings || {},
+          events: m.events || {},
+          ach: m.ach || {},
+          runs: m.runs || [],
+        };
+      }
+    } catch (e) {}
+  }
+  function saveMeta() {
+    try {
+      localStorage.setItem(MKEY, JSON.stringify(M));
+    } catch (e) {}
+  }
+  const ACH = [
+    { id: "juan", n: "卷王", d: "找导师开小会 28 次以上", c: (s) => (s.tot.meet || 0) >= 28 },
+    {
+      id: "free",
+      n: "自由的灵魂",
+      d: "读到研三，一次小会都没开过",
+      c: (s) => !s.tot.meet && s.month > 24,
+    },
+    { id: "sci", n: "科研新星", d: "两篇论文被接收", c: (s) => accN(s) >= 2 },
+    {
+      id: "top",
+      n: "顶会选手",
+      d: "有一篇 CCF-A 被接收",
+      c: (s) => s.papers.some((p) => p.status === "accepted" && p.lv === "A"),
+    },
+    {
+      id: "water",
+      n: "水文大师",
+      d: "三篇 CCF-C 被接收",
+      c: (s) => s.papers.filter((p) => p.status === "accepted" && p.lv === "C").length >= 3,
+    },
+    { id: "unlucky", n: "倒霉蛋", d: "被拒稿 3 次以上", c: (s) => s.rejTotal >= 3 },
+    { id: "moon", n: "月光族", d: "有 6 个月把钱花得一分不剩", c: (s) => s.broke >= 6 },
+    { id: "rich", n: "小金库", d: "结束时存款超过 5000", c: (s) => s.money >= 5000 },
+    { id: "worker", n: "打工人", d: "帮导师做横向 24 次以上", c: (s) => (s.tot.hx || 0) >= 24 },
+    { id: "owl", n: "夜猫子", d: "组会前熬夜 6 次以上", c: (s) => s.nights >= 6 },
+    { id: "walker", n: "走地鸡", d: "看展 12 次以上", c: (s) => (s.tot.expo || 0) >= 12 },
+    { id: "travel", n: "旅行家", d: "旅游 6 次以上", c: (s) => (s.tot.travel || 0) >= 6 },
+    { id: "gym", n: "健身达人", d: "健身 20 次以上", c: (s) => (s.tot.gym || 0) >= 20 },
+    { id: "sleep", n: "睡神", d: "睡觉 24 次以上", c: (s) => (s.tot.sleep || 0) >= 24 },
+    { id: "mic", n: "麦霸", d: "去 KTV 12 次以上", c: (s) => (s.tot.ktv || 0) >= 12 },
+    {
+      id: "social",
+      n: "社交悍匪",
+      d: "聚餐、桌游、KTV 加起来 40 次以上",
+      c: (s) => (s.tot.dinner || 0) + (s.tot.board || 0) + (s.tot.ktv || 0) >= 40,
+    },
+    {
+      id: "host",
+      n: "组里的东道主",
+      d: "请全组吃饭 10 次以上",
+      c: (s) => (s.tot.treat || 0) >= 10,
+    },
+    { id: "kind", n: "活菩萨", d: "日行一善 20 次以上", c: (s) => (s.tot.kind || 0) >= 20 },
+    { id: "hair", n: "发量王者", d: "结束时发量 95 以上", c: (s) => s.a.hair >= 95 },
+    { id: "bald", n: "聪明绝顶", d: "结束时发量不到 30", c: (s) => s.a.hair < 30 },
+    {
+      id: "love",
+      n: "爱情学业双丰收",
+      d: "毕业时还有对象",
+      c: (s, k) => s.partner && GRAD.indexOf(k) >= 0,
+    },
+    {
+      id: "stolen",
+      n: "为他人作嫁衣",
+      d: "有论文的一作署了导师",
+      c: (s) => s.papers.some((p) => p.stolen),
+    },
+    {
+      id: "first",
+      n: "开山大弟子",
+      d: "在青年导师门下把导师心腹刷到 80 以上",
+      c: (s) => s.mentor && s.mentor.id === "young" && s.a.trust >= 80,
+    },
+    { id: "move", n: "另起炉灶", d: "转组成功过", c: (s) => s.transfers >= 1 },
+    { id: "blind", n: "盲审高分", d: "盲审 95 分以上", c: (s) => s.blind >= 95 },
+    {
+      id: "late",
+      n: "大器晚成",
+      d: "延毕之后顺利毕业",
+      c: (s, k) => s.ext >= 1 && GRAD.indexOf(k) >= 0,
+    },
+  ];
+  const GRAD = ["bigco", "job", "home", "phdcn", "phdab"];
+  function accN(s) {
+    return s.papers.filter((p) => p.status === "accepted" && !p.collab).length;
+  }
+  function roleName(p) {
+    return p.stolen
+      ? "二作（一作署了导师）"
+      : { first: "一作", cofirst: "共同一作", second: "二作" }[p.role || "first"];
+  }
+  function recordRun(k) {
+    const got = ACH.filter((a) => {
+      try {
+        return a.c(S, k);
+      } catch (e) {
+        return false;
+      }
+    }).map((a) => a.id);
+    S.runAch = got;
+    S.newAch = got.filter((id) => !M.ach[id]);
+    S.newEnd = !M.endings[k];
+    got.forEach((id) => {
+      M.ach[id] = 1;
+    });
+    M.endings[k] = (M.endings[k] || 0) + 1;
+    M.runs.unshift({
+      name: S.name,
+      end: k,
+      mentor: S.mentor ? S.mentor.name : "",
+      when: dateStr(Math.min(S.month, END_M + 6 * S.ext)),
+      acc: S.papers
+        .filter((p) => p.status === "accepted")
+        .map((p) => p.lv)
+        .join(""),
+      blind: S.blind || 0,
+      ach: got.length,
+    });
+    if (M.runs.length > 20) M.runs.length = 20;
+    saveMeta();
+  }
+  function blindScore(rand) {
+    const W = { C: 1.2, B: 1.6, A: 2 };
+    const st = S.papers
+      .filter((p) => !p.collab)
+      .map((p) => W[p.lv] * p.stage)
+      .sort((a, b) => b - a);
+    let v =
+      60 +
+      (st[0] || 0) +
+      (st[1] || 0) +
+      (S.papers.some((p) => p.subs > 0 && !p.collab) ? 3 : 0) +
+      3 * Math.min(2, accN(S)) +
+      (rand ? rnd(7) - 3 : 0);
+    return Math.round(Math.max(60, Math.min(100, v)));
+  }
+  function endImg(k) {
+    return ENDING_IMG[k]
+      ? '<span class="evimgs endimgs">' +
+          ENDING_IMG[k].map((u) => '<img alt="' + ENDINGS[k][0] + '" src="' + u + '">').join("") +
+          "</span>"
+      : "";
+  }
+  function endDetail(k) {
+    return (
+      '<div class="paper"><h3>' +
+      ENDINGS[k][0] +
+      "</h3>" +
+      endImg(k) +
+      "<p>" +
+      ENDINGS[k][1] +
+      '</p><p class="muted">已达成 ' +
+      M.endings[k] +
+      " 次</p></div>"
+    );
+  }
+  function evDetail(id) {
+    const e = EVENTS.find((x) => x.id === id);
+    if (!e) return "";
+    const one = (o, i) => {
+      const fx = [effText(o.e), FXNOTE[id + ":" + i]].filter(Boolean).join("；") || "没有变化";
+      return fx;
+    };
+    let h =
+      '<div class="paper"><div class="top"><h3>' +
+      e.n +
+      '</h3><span class="tag ' +
+      e.tone +
+      '">' +
+      CATS[e.c] +
+      "事件</span></div>" +
+      evImgs(id) +
+      '<p class="story">' +
+      e.d +
+      "</p>";
+    if (e.o.length === 1) h += '<p class="muted">直接结算：' + one(e.o[0], 0) + "</p>";
+    else
+      h += e.o
+        .map(
+          (o, i) =>
+            "<p><b>" +
+            "甲乙丙丁"[i] +
+            "　" +
+            o.t +
+            "</b>" +
+            (o.reqT ? "（" + o.reqT + "）" : "") +
+            '<br><span class="muted">' +
+            (o.r ? o.r + " " : "") +
+            one(o, i) +
+            "</span></p>",
+        )
+        .join("");
+    return h + "</div>";
+  }
+  function albumList(t) {
+    if (t === "end") return Object.keys(ENDINGS).filter((k) => M.endings[k]);
+    if (t === "ev") return EVENTS.filter((e) => M.events[e.id]).map((e) => e.id);
+    return ACH.filter((a) => M.ach[a.id]).map((a) => a.id);
+  }
+  function albumDetail() {
+    const o = S.open,
+      L = albumList(o.t);
+    let i = L.indexOf(o.id);
+    if (i < 0) {
+      return "";
+    }
+    const name = { end: "结局", ev: "事件", ach: "成就" }[o.t];
+    let body;
+    if (o.t === "end") body = endDetail(o.id);
+    else if (o.t === "ev") body = evDetail(o.id);
+    else {
+      const a = ACH.find((x) => x.id === o.id);
+      body =
+        '<div class="paper"><h3>' +
+        a.n +
+        "</h3>" +
+        (ACH_IMG[a.id] ? '<div class="achimgs">' + achImgs(a.id, "achimg") + "</div>" : "") +
+        '<p class="story">' +
+        a.d +
+        '</p><p class="muted">已解锁</p></div>';
+    }
+    return (
+      '<div class="top"><h2>' +
+      name +
+      '图鉴</h2><button class="mini" onclick="G.open(null)">返回图鉴</button></div>' +
+      '<div class="pager"><button class="mini" onclick="G.nav(-1)"' +
+      (L.length < 2 ? " disabled" : "") +
+      ' aria-label="上一个">‹ 上一个</button><span class="muted">' +
+      (i + 1) +
+      " / " +
+      L.length +
+      '</span><button class="mini" onclick="G.nav(1)"' +
+      (L.length < 2 ? " disabled" : "") +
+      ' aria-label="下一个">下一个 ›</button></div>' +
+      body
+    );
+  }
+  function albumHtml() {
+    if (S.open && S.open.t) {
+      const d = albumDetail();
+      if (d) return d;
+    }
+    const evs = EVENTS.filter((e) => M.events[e.id]).length,
+      ach = ACH.filter((a) => M.ach[a.id]).length,
+      eds = Object.keys(ENDINGS).filter((k) => M.endings[k]).length;
+    let h =
+      '<div class="top"><h2>图鉴</h2><button class="mini" onclick="G.modal(null)">关闭</button></div><p class="muted">跨局保留，存在这台设备的浏览器里。点已解锁的条目可以看详情，在详情里左右切换。</p>';
+    h +=
+      '<h3 class="sub">结局 ' +
+      eds +
+      "/" +
+      Object.keys(ENDINGS).length +
+      '</h3><div class="chips">' +
+      Object.keys(ENDINGS)
+        .map((k) =>
+          M.endings[k]
+            ? "<button class=\"chip up\" onclick=\"G.open('end','" +
+              k +
+              "')\">" +
+              ENDINGS[k][0] +
+              " ×" +
+              M.endings[k] +
+              "</button>"
+            : '<span class="chip lock">？？？</span>',
+        )
+        .join("") +
+      "</div>";
+    h +=
+      '<h3 class="sub">成就 ' +
+      ach +
+      "/" +
+      ACH.length +
+      '</h3><div class="grid2">' +
+      ACH.map((a) =>
+        M.ach[a.id]
+          ? "<button class=\"achb\" onclick=\"G.open('ach','" +
+            a.id +
+            "')\">" +
+            a.n +
+            "<small>" +
+            a.d +
+            "</small></button>"
+          : '<div class="ach"><b>？？？</b><span class="muted">' + a.d + "</span></div>",
+      ).join("") +
+      "</div>";
+    h +=
+      '<h3 class="sub">遇到过的事件 ' +
+      evs +
+      "/" +
+      EVENTS.length +
+      '</h3><div class="chips">' +
+      EVENTS.map((e) =>
+        M.events[e.id]
+          ? "<button class=\"chip\" onclick=\"G.open('ev','" + e.id + "')\">" + e.n + "</button>"
+          : '<span class="chip lock">？？？</span>',
+      ).join("") +
+      "</div>";
+    h +=
+      '<h3 class="sub">历史记录</h3><div class="log">' +
+      (M.runs
+        .map(
+          (r) =>
+            "<span><b>" +
+            esc(r.name) +
+            "</b> · " +
+            (ENDINGS[r.end] ? ENDINGS[r.end][0] : "强制退学") +
+            " · " +
+            r.when +
+            (r.acc ? " · 接收论文 " + r.acc : "") +
+            (r.blind ? " · 盲审 " + r.blind : "") +
+            " · 成就 " +
+            r.ach +
+            "</span>",
+        )
+        .join("") || "<span>还没有玩完过一局。</span>") +
+      "</div>";
+    return h;
+  }
+  loadMeta();
+
+  /* ================================================================
+   * 论文投稿结果、盲审、毕业判定
+   * ================================================================ */
+  function paperProb(p) {
+    const base = p.fix != null ? p.fix : PAPER[p.lv].ps[0] + (p.acc || 0);
+    return Math.min(100, base + (p.bonus || 0) + Math.floor(S.a.luck / 10));
+  }
+  function resolvePaper(p) {
+    const pr = paperProb(p);
+    p.fix = null;
+    p.bonus = 0;
+    if (Math.random() * 100 < pr) {
+      p.status = "accepted";
+      if (p.collab) {
+        S.a.mood = clamp(S.a.mood + 3);
+        return (
+          "合作的论文《" +
+          esc(p.title) +
+          "》（CCF-" +
+          p.lv +
+          "，你是" +
+          roleName(p) +
+          "）被接收了！心情+3"
+        );
+      }
+      S.yearAcc = (S.yearAcc || 0) + 1;
+      const c = PAPER[p.lv];
+      S.a.trust = clamp(S.a.trust + c.trust);
+      S.a.envy = clamp(S.a.envy + c.envy);
+      return (
+        "论文 #" +
+        p.id +
+        "（CCF-" +
+        p.lv +
+        "）被接收了！导师心腹+" +
+        c.trust +
+        "，同辈忮忌+" +
+        c.envy
+      );
+    }
+    if (p.collab) {
+      p.rej++;
+      p.due = S.month + 2;
+      p.fix = Math.min(100, pr + 15);
+      return "合作的论文《" + esc(p.title) + "》被拒了，同门说改一改两个月后再投。";
+    }
+    // 没中：按档次的比例分成小修、大修、拒稿
+    const mx = PAPER[p.lv].mix,
+      r = Math.random() * (mx[0] + mx[1] + mx[2]);
+    p.rej++;
+    if (r < mx[0]) {
+      p.status = "doing";
+      p.stage = NS - 1;
+      p.acc = (p.acc || 0) + 30;
+      S.a.res = clamp(S.a.res - 1);
+      return (
+        "论文 #" +
+        p.id +
+        "（CCF-" +
+        p.lv +
+        "）审稿意见：<b>小修</b>。退回「写作」阶段，改完再投，下次接收率+30%。心态-1"
+      );
+    }
+    if (r < mx[0] + mx[1]) {
+      p.status = "doing";
+      p.stage = NS - 2;
+      p.acc = (p.acc || 0) + 15;
+      S.a.res = clamp(S.a.res - 3);
+      return (
+        "论文 #" +
+        p.id +
+        "（CCF-" +
+        p.lv +
+        "）审稿意见：<b>大修</b>。退回「实验」阶段，补完实验再投，下次接收率+15%。心态-3"
+      );
+    }
+    p.status = "rejected";
+    p.acc = (p.acc || 0) + 15;
+    S.rejTotal++;
+    S.a.res = clamp(S.a.res - 5);
+    return (
+      "论文 #" +
+      p.id +
+      "（CCF-" +
+      p.lv +
+      "）被<b>拒稿</b>，心态-5。可以退回「算法」阶段重做（下次接收率+15%）" +
+      (p.lv === "C" ? "。" : "，也可以降档转投。")
+    );
+  }
+  function addCollab(s, role, prob) {
+    s.papers.push({
+      id: ++s.pid,
+      lv: "A",
+      title: genTitle(),
+      stage: NS,
+      status: "submitted",
+      role: role,
+      collab: true,
+      rej: 0,
+      subs: 1,
+      due: s.month + 1,
+      fix: prob,
+    });
+    return s.papers[s.papers.length - 1];
+  }
+  function end(k) {
+    S.ending = { k: k, t: ENDINGS[k][0], x: ENDINGS[k][1] };
+    S.screen = "end";
+    S.crisis = null;
+    S.modal = null;
+    S.notices = [];
+    S.ask = null;
+    recordRun(k);
+  }
+  function checks() {
+    if (S.screen !== "main") return;
+    if (S.a.health <= 0) {
+      end("dead");
+      return;
+    }
+    if (S.a.mood <= 0) {
+      end("rest");
+      return;
+    }
+    S.w = S.w || {};
+    // 每局每条线只提醒一次：首次低于 50、首次低于 30。只是提醒，不强制做选择
+    for (const k of ["health", "mood"]) {
+      const v = S.a[k];
+      const H = k === "health";
+      if (v < 30 && !S.w[k + "30"]) {
+        S.w[k + "30"] = true;
+        S.w[k + "50"] = true;
+        notice(
+          H ? "身体亮红灯" : "情绪亮红灯",
+          H
+            ? "健康已经低于 30，做科研的效率只剩一半。该去医院看看了，先把身体养好最重要。<br><b>健康降到 0 会离开这个美丽的世界。</b><br>想换个环境，可以在日常里申请转组。"
+            : "心情已经低于 30，做科研的效率只剩一半。出去玩一玩、见见朋友、好好睡一觉，怎么安排都由你。<br><b>心情降到 0 就要休学了。</b><br>想换个环境，可以在日常里申请转组。",
+        );
+      } else if (v < 50 && !S.w[k + "50"]) {
+        S.w[k + "50"] = true;
+        notice(
+          H ? "身体在抗议" : "情绪有点低落",
+          H
+            ? "健康已经低于 50。最近熬得有点狠，多睡觉、多运动，身体是革命的本钱。<br><b>健康降到 0 会离开这个美丽的世界。</b><br>想换个环境，可以在日常里申请转组。"
+            : "心情已经低于 50。别光顾着科研，找点让自己开心的事做。<br><b>心情降到 0 就要休学了。</b><br>想换个环境，可以在日常里申请转组。",
+        );
+      }
+    }
+  }
+  function talk(kind) {
+    const best = S.papers.filter((p) => !p.collab).sort((a, b) => b.stage - a.stage)[0];
+    const sc = blindScore(false);
+    let v,
+      x = "";
+    if (kind === "开题") {
+      v = best && best.stage >= 2 ? "稳过" : best ? "风险通过" : "勉强通过";
+    } else {
+      if (best && best.stage >= NS) v = "稳过";
+      else if (S.a.trust >= 40) {
+        v = "风险通过";
+        x = "论文还没写完，是导师替你说了话。";
+      } else {
+        v = "勉强通过";
+        S.a.mood = clamp(S.a.mood - 6);
+        x = "论文还没写完，被评委问得下不来台。心情-6。";
+      }
+    }
+    const prog = best
+      ? "你手上有 " +
+        S.papers.length +
+        " 篇论文，最快的一篇" +
+        (best.stage >= NS ? "已经写完" : "做到了「" + STAGES[best.stage - 1] + "」") +
+        "。"
+      : "你手上还没有任何论文。";
+    const adv =
+      sc >= 83
+        ? "照这个节奏，毕业没问题。"
+        : sc >= 77
+          ? "离毕业还差一口气，别松劲。"
+          : "照这个速度是毕不了业的，该抓紧了。";
+    return (
+      "<b>导师找你谈话 · " +
+      kind +
+      "</b>：" +
+      prog +
+      "<br>导师的毕业要求是至少发表一篇 CCF-" +
+      reqLv() +
+      (reqOK() ? "，你已经满足。" : "，你还没有满足。") +
+      "<br>" +
+      kind +
+      '结果：<span class="hl">' +
+      v +
+      "</span>。" +
+      x +
+      "<br>按现在的进度，预计盲审 " +
+      sc +
+      " 分（80 分及格）。" +
+      adv
+    );
+  }
+  /* ================================================================
+   * 每月流程：月初结算、组会、日常、随机事件、转组
+   * ================================================================ */
+  function monthStart(first) {
+    if (!first) {
+      if (S.partner) {
+        if (S.dates === 0) S.noDate++;
+        else S.noDate = 0;
+      }
+      S.cnt = {};
+      S.dates = 0;
+      S.loveDone = {};
+      S.loveMsg = "";
+    }
+    if (S.month > END_M + 6 * S.ext) {
+      finalize();
+      return;
+    }
+    S.mprog = 0;
+    S.mres = 0;
+    const N = [],
+      L = [];
+    const cal = ((S.month + 7) % 12) + 1;
+    if (!first && S.money <= 0) S.broke++;
+    S.money = S.money + (S.payHold ? 0 : S.mentor.stipend) - LIVING;
+    N.push((S.payHold ? "劳务费停发中" : "劳务费 +" + S.mentor.stipend) + "，吃住 -" + LIVING);
+    if (S.partner) {
+      S.a.mood = clamp(S.a.mood + 3);
+      N.push("有对象陪着，心情+3");
+    }
+    if (!first && S.a.res >= 70) {
+      S.a.mood = clamp(S.a.mood + 1);
+      N.push("心态好，心情+1");
+    }
+    if (cal === 2) {
+      S.money += 200;
+      N.push("过年红包 +200，寒假没有组会");
+    }
+    S.papers.forEach((p) => {
+      if (p.status === "submitted" && p.due <= S.month) L.push(resolvePaper(p));
+    });
+    S.fixed = [];
+    if (hasClass(S.month)) {
+      S.fixed.push("上课");
+      S.a.ability = clamp(S.a.ability + 0.3);
+    }
+    if (S.internLeft > 0) {
+      S.internLeft--;
+      S.money += 200;
+      S.fixed.push("实习");
+      N.push(
+        "实习工资 +200" + (S.internLeft ? "，还剩 " + S.internLeft + " 个月" : "，这是最后一个月"),
+      );
+    }
+    if (S.hxLeft > 0) {
+      S.hxLeft--;
+      S.money += 200;
+      S.a.health = clamp(S.a.health - 2);
+      S.hx++;
+      S.fixed.push("横向");
+      N.push(
+        "导师派的横向 +200，健康-2" +
+          (S.hxLeft ? "，还剩 " + S.hxLeft + " 个月" : "，这是最后一个月"),
+      );
+    }
+    S.week = 1 + S.fixed.length;
+    if (S.month === 10) L.push(talk("开题"));
+    if (S.month === 22) L.push(talk("中期"));
+    if (first || !S.ys) yearSnap();
+    let YP = null;
+    if (S.month === 12 || S.month === 24) {
+      const home = S.wealth * 10;
+      S.money += home;
+      let y = "家里又给你打了 " + home + " 元。";
+      let ev = 0;
+      if (S.a.trust >= 60) {
+        ev += 5;
+        y += "你成了导师最器重的学生，";
+      } else if (S.a.trust >= 30) {
+        ev += 2;
+        y += "导师对你印象不错，";
+      }
+      if (S.yearAcc > 0) {
+        ev += 3 * S.yearAcc;
+        y += "这一年还发了 " + S.yearAcc + " 篇论文，";
+      }
+      if (ev > 0) {
+        S.a.envy = clamp(S.a.envy + ev);
+        y += "同门看你的眼神有点复杂。同辈忮忌+" + ev + "。";
+      } else y += "你在组里不显山不露水，没人注意你。";
+      S.yearAcc = 0;
+      YP = [
+        (S.month === 12 ? "研一" : "研二") + "学年结算",
+        "7 月结束，这一学年过完了。" + y + "</p>" + yearPage() + "<p hidden>",
+      ];
+    }
+    if (S.month === 25)
+      L.push("<b>秋招开始</b>：找工作最看实习，其次是论文和横向。现在补还来得及。");
+    if (S.month === 33 + 6 * S.ext && !S.defended) {
+      const sc = blindScore(true);
+      S.blind = sc;
+      let okB = sc >= 80,
+        bt;
+      if (okB) bt = "<b>盲审</b>：" + sc + " 分，通过。";
+      else if (S.a.trust >= S.mentor.rescue && sc >= S.mentor.resMin) {
+        S.blind = 80;
+        okB = true;
+        bt = "<b>盲审</b>：初评只有 " + sc + " 分。导师连夜帮你改论文，硬是捞到了 80 分，通过。";
+      } else bt = "<b>盲审</b>：" + sc + " 分，没到 80 分的及格线。";
+      const okP = reqOK();
+      const pt =
+        "<br><b>导师的毕业要求</b>：至少发表一篇 CCF-" +
+        reqLv() +
+        "。" +
+        (okP ? "你已经满足。" : "你还没有满足，导师不肯在答辩申请上签字。");
+      if (okB && okP) {
+        S.defended = true;
+        L.push(bt + pt + "<br>答辩顺利结束，剩下的时间可以继续攒简历。");
+      } else if (S.ext < 2) {
+        S.ext++;
+        S.a.mood = clamp(S.a.mood - 10);
+        L.push(bt + pt + '<br><span class="hl">延毕半年</span>，心情-10。');
+      } else {
+        end("fail");
+        return;
+      }
+    }
+    if (S.money < 0) N.push("钱不够了，靠向同门借钱过活，现在欠 " + -S.money + " 元");
+    S.note = "月初：" + N.join("；") + "。";
+    log(S.note);
+    if (L.length) notice(dateStr(S.month), L.join("<br>"));
+    if (YP) {
+      notice(YP[0], YP[1]);
+      yearSnap();
+    }
+    S.pick = [];
+    for (const k of S.lastPlan) {
+      const d = DAILY.find((x) => x.k === k);
+      if (S.pick.length >= slots()) break;
+      if (d && avail(d) && S.pick.indexOf(k) < 0 && pickCost(S.pick.concat([k])) <= S.money)
+        S.pick.push(k);
+    }
+    if (cal === 2 && S.month < 33) S.ask = { kind: "stay" };
+    else if (S.partner && S.noDate >= 2) S.ask = { kind: "breakup" };
+    if (slots() <= 0 && !S.ask) afterDailies();
+    checks();
+  }
+  function isHoliday(m) {
+    return ((m + 7) % 12) + 1 === 2;
+  }
+  function reqLv() {
+    return (S.mentor && S.mentor.req) || "C";
+  }
+  function reqOK() {
+    const n = DOWN[reqLv()];
+    return S.papers.some((p) => p.status === "accepted" && p.role !== "second" && DOWN[p.lv] <= n);
+  }
+  function needN() {
+    return S.mentor.id === "young" || S.mentor.id === "nasty" ? 2 : 1;
+  }
+  function afterDailies() {
+    S.modal = null;
+    if (isHoliday(S.month)) {
+      S.step = "roll";
+      return;
+    }
+    if (S.skipMeet) {
+      S.skipMeet = false;
+      S.step = "roll";
+      S.result = "导师出差，这个月不开组会。";
+      log(S.result);
+      return;
+    }
+    S.step = "meet";
+    if ((S.mres || 0) < needN()) S.ask = { kind: "meet" };
+    else meeting();
+  }
+  function meeting() {
+    const g = S.mres || 0,
+      n = needN();
+    let t, r;
+    if (g <= 0) {
+      t = "你站在投影前，翻来覆去只有一页「下月计划」。";
+      r = applyEff({ trust: -3, mood: -4 }, true);
+    } else if (g < n) {
+      if (Math.random() < (S.mentor.id === "nasty" ? 0.95 : 0.6)) {
+        t = "导师连问了三个「然后呢」，你一个也答不上来。";
+        r = applyEff({ trust: -2, mood: S.mentor.id === "nasty" ? -4 : -2, res: -1 }, true);
+      } else {
+        t = "导师今天心不在焉，你三言两语混了过去。";
+        r = "没有任何变化";
+      }
+    } else if (g < 3) {
+      t = "进展讲得清清楚楚，导师点了点头。";
+      const e = { trust: 1 };
+      if (S.mentor.id !== "nasty" && Math.random() < 0.3) {
+        t += "还当众夸了你一句。";
+        e.mood = 2;
+      }
+      r = applyEff(e, true);
+    } else {
+      t = "你做了三十页 slides，从动机一路讲到消融实验，导师很满意。";
+      if (Math.random() < 0.5) {
+        t += "同门在底下交换了一个眼神：太卷了。";
+        r = applyEff({ trust: 2, envy: 3 }, true);
+      } else {
+        t += "会后有师弟师妹来找你请教。";
+        r = applyEff({ trust: 2, rel: 1 }, true);
+      }
+    }
+    let extra = "";
+    if (S.mentor.id === "nasty") {
+      if (g >= n) {
+        S.failStreak = 0;
+        if (S.payHold) {
+          if (S.month >= S.holdAt + 2) {
+            S.payHold = false;
+            extra = "<br>导师翻了翻你的 PPT：“行，劳务下个月恢复。”";
+          } else extra = "<br>导师看了一眼：“有点样子了，劳务的事下个月再说。”";
+        }
+      } else {
+        S.failStreak = (S.failStreak || 0) + 1;
+        if (S.failStreak >= 2 && !S.payHold) {
+          S.payHold = true;
+          S.holdAt = S.month;
+          extra =
+            '<br><span class="hl">“连着两个月拿不出东西，劳务先停了，什么时候有进展什么时候再发。”</span>';
+        }
+      }
+    }
+    notice("月度组会", t + "<br><b>" + r + "</b>" + extra);
+    log("组会：" + r + (extra ? "；" + (S.payHold ? "劳务停发" : "劳务恢复") : ""));
+    S.step = "roll";
+    checks();
+  }
+  function hasClass(m) {
+    return m <= 10 && !isHoliday(m);
+  }
+  function slots() {
+    return Math.max(0, 5 - S.week);
+  }
+  function pickCost(ks) {
+    return ks.reduce((t, k) => {
+      const m = DAILY.find((x) => x.k === k).e.money;
+      return t + (m < 0 ? -m : 0);
+    }, 0);
+  }
+  function avail(d) {
+    if (d.k === "meet" && S.mentor && S.mentor.mp == null) return false;
+    return !d.y3 || S.month > 23;
+  }
+  function blocked() {
+    return S.step !== "daily" || S.screen !== "main" || S.crisis || S.notices.length || S.ask;
+  }
+  function doDaily(k) {
+    const d = DAILY.find((x) => x.k === k);
+    if (!d || !avail(d) || (S.cnt[k] || 0) >= 1 || !canPay(d.e)) return false;
+    let r = applyEff(dailyEff(d), false);
+    if (d.rnd) {
+      const c = Math.max(0, Math.min(S.money, (rnd(10) + 1) * 10));
+      S.money -= c;
+      if (c) r += "，金钱-" + c;
+    }
+    S.cnt[k] = (S.cnt[k] || 0) + 1;
+    if (k === "hx") S.hx++;
+    if (k === "apply") S.applies++;
+    if (k === "meet" || k === "read" || k === "exp") S.mres = (S.mres || 0) + 1;
+    S.tot[k] = (S.tot[k] || 0) + 1;
+    S.plan.push(k);
+    const t = "第 " + S.week + " 周 · " + d.n + "：" + r;
+    log(t);
+    S.result = t;
+    S.week++;
+    if (S.week > 4) afterDailies();
+    checks();
+    return true;
+  }
+  function finalize() {
+    const L = [];
+    S.papers.forEach((p) => {
+      if (p.status === "submitted") L.push(resolvePaper(p));
+    });
+    S.finalNote = L.join("<br>");
+    S.yearEnd = yearPage();
+    S.screen = "resume";
+    S.modal = null;
+    S.crisis = null;
+    S.notices = [];
+  }
+  function pickEvent(cat) {
+    let c = EVENTS.filter(
+      (e) => e.c === cat && (!e.m || e.m.indexOf(S.mentor.id) >= 0) && (!e.cond || e.cond(S)),
+    );
+    if (c.length > 1) c = c.filter((e) => e.id !== S.lastEv);
+    const ws = c.map((e) => {
+      let w = 1;
+      if (e.tone === "good") w *= S.mentor.gw * (1 + S.a.luck / 100);
+      if (e.tone === "bad") w *= S.mentor.bw;
+      if (e.w) w *= e.w(S);
+      if (e.m) w *= 2;
+      return w;
+    });
+    let r = Math.random() * ws.reduce((x, y) => x + y, 0);
+    for (let i = 0; i < c.length; i++) {
+      r -= ws[i];
+      if (r <= 0) return c[i];
+    }
+    return c[c.length - 1];
+  }
+  function endWeek() {
+    checks();
+    if (S.screen !== "main") return;
+    S.week = 1;
+    S.rolls = 0;
+    S.step = "daily";
+    S.ev = null;
+    S.ask = null;
+    if (S.plan.length) S.lastPlan = S.plan;
+    S.plan = [];
+    S.month++;
+    monthStart(false);
+  }
+  function transfer() {
+    S.a.health = Math.max(1, S.a.health - 10);
+    S.a.mood = Math.max(0, S.a.mood - 10);
+    const ok = Math.random() < Math.min(0.9, 0.5 + S.a.luck / 500);
+    if (ok) {
+      {
+        const o = MENTORS.filter((m) => m.id !== S.mentor.id);
+        S.mentor = o[rnd(o.length)];
+      }
+      S.a.progress = 0;
+      S.a.trust = 0;
+      S.a.envy = 0;
+      S.papers = [];
+      S.transfers++;
+      S.collab = false;
+      S.payHold = false;
+      S.failStreak = 0;
+      S.skipMeet = false;
+      S.hxLeft = 0;
+      if (S.a.mood < 30) S.a.mood = 30;
+    }
+    return ok;
+  }
+  function effLv(p) {
+    return DOWN[p.lv] + (p.stolen ? 1 : 0) + (p.role === "second" ? 2 : 0);
+  }
+  function roleW(p) {
+    return p.stolen ? 0.5 : p.role === "second" ? 0.3 : p.role === "cofirst" ? 0.7 : 1;
+  }
+  function resumeData() {
+    const acc = S.papers.filter((p) => p.status === "accepted");
+    const sub = S.papers.filter((p) => p.status !== "accepted" && p.subs > 0);
+    const score =
+      S.interns * 3 +
+      acc.reduce((t, p) => t + { A: 3, B: 2, C: 1 }[p.lv] * roleW(p), 0) +
+      Math.min(2, Math.floor(S.hx / 5)) +
+      Math.min(2, Math.floor(S.applies / 3));
+    return {
+      acc: acc,
+      sub: sub,
+      score: score,
+      hasB: acc.some((p) => effLv(p) <= 2),
+      hasA: acc.some((p) => effLv(p) <= 1),
+    };
+  }
+
+  /* ================================================================
+   * 操作：所有按钮点击后调用的 G.xxx 函数（开局、选日常、掷骰子、选事件选项、论文操作等）
+   * ================================================================ */
+  const G = {};
+  function act(fn) {
+    return function () {
+      fn.apply(null, arguments);
+      save();
+      render();
+    };
+  }
+  G.start = act(() => {
+    wipe();
+    S = newState();
+    S.screen = "drawStudent";
+    S.name = NAMES[rnd(NAMES.length)];
+  });
+  G.rename = act(() => {
+    let n;
+    do {
+      n = NAMES[rnd(NAMES.length)];
+    } while (n === S.name);
+    S.name = n;
+  });
+  G.resume = act(() => {
+    const s = load();
+    if (s) {
+      S = s;
+      S.anim = false;
+    }
+  });
+  G.restart = act(() => {
+    wipe();
+    S = newState();
+  });
+  G.drawStu = act(() => {
+    const el = typeof document !== "undefined" && document.getElementById("nm");
+    if (el) S.name = el.value;
+    S.stu = drawStudent(S.stu);
+  });
+  G.okStu = act(() => {
+    const el = typeof document !== "undefined" && document.getElementById("nm");
+    if (el) S.name = el.value;
+    S.name = (S.name || "").trim().slice(0, 12) || NAMES[rnd(NAMES.length)];
+    const t = STUDENTS[S.stu];
+    S.a = {
+      health: t.a.health,
+      mood: t.a.mood,
+      res: t.a.res,
+      hair: t.a.hair,
+      rel: t.a.rel,
+      scheme: t.a.scheme,
+      luck: t.a.luck,
+      ability: t.a.ability,
+      progress: 0,
+      trust: 0,
+      envy: 0,
+    };
+    S.wealth = t.a.wealth;
+    S.money = t.a.wealth * 20;
+    S.screen = "drawMentor";
+  });
+  G.drawMen = act(() => {
+    let n;
+    do {
+      n = rnd(MENTORS.length);
+    } while (n === S.men);
+    S.men = n;
+  });
+  G.okMen = act(() => {
+    S.mentor = MENTORS[S.men];
+    S.screen = "q1";
+  });
+  const QS = {
+    q1: {
+      t: "开学前的假期，你打算怎么过？",
+      o: [
+        { t: "提前进组", e: { ability: 5, progress: 5, trust: 5, health: -5, mood: -5 } },
+        { t: "在家看论文", e: { ability: 5, health: -2, res: 5 } },
+        { t: "跟好朋友一起快乐玩耍", e: { health: 5, mood: 5 } },
+      ],
+      next: "q2",
+    },
+    q2: {
+      t: "第一次见导师，要不要带礼物？",
+      o: [
+        { t: "花 200 挑了点贵货", e: { money: -200, envy: 2 }, x: "导师当场拒收，钱也退不了。" },
+        { t: "花 50 买了点好吃的", e: { money: -50, trust: 2 }, x: "导师笑着收下了。" },
+        { t: "啥也不带", e: {}, x: "空手也挺好。" },
+      ],
+      next: "q3",
+    },
+    q3: {
+      t: "要不要给同门带礼物？",
+      o: [
+        { t: "花 200 挑了点贵货", e: { money: -200, rel: 5 }, x: "师兄师姐都记住了你。" },
+        { t: "花 50 买了点好吃的", e: { money: -50, rel: 2 }, x: "零食一会儿就分完了。" },
+        { t: "啥也不带", e: {}, x: "大家都很忙，没人在意。" },
+      ],
+      next: "main",
+    },
+  };
+  G.answer = act((q, i) => {
+    if (S.qres) return;
+    const o = QS[q].o[i];
+    if (!canPay(o.e)) return;
+    // 开学前的选择不受能力、心态加成影响
+    for (const k in o.e) {
+      if (k === "money") S.money = Math.max(0, S.money + o.e[k]);
+      else S.a[k] = clamp(S.a[k] + o.e[k]);
+    }
+    S.qres = {
+      t: o.t,
+      x: (o.x ? o.x + "<br>" : "") + "<b>" + (effText(o.e) || "没有任何变化") + "</b>",
+    };
+  });
+  G.qnext = act(() => {
+    if (!S.qres) return;
+    S.qres = null;
+    S.screen = QS[S.screen].next;
+    if (S.screen === "main") {
+      S.month = 1;
+      S.week = 1;
+      S.step = "daily";
+      monthStart(true);
+    }
+  });
+  G.daily = act((k) => {
+    if (blocked()) return;
+    doDaily(k);
+  });
+  G.repeat = act(() => {
+    if (blocked()) return;
+    S.pick = [];
+    for (const k of S.lastPlan) {
+      const d = DAILY.find((x) => x.k === k);
+      if (S.pick.length >= slots()) break;
+      if (
+        d &&
+        avail(d) &&
+        sickOK(d) &&
+        !(S.cnt[k] >= 1) &&
+        S.pick.indexOf(k) < 0 &&
+        pickCost(S.pick.concat([k])) <= S.money
+      )
+        S.pick.push(k);
+    }
+  });
+  G.pick = act((k) => {
+    if (blocked()) return;
+    const i = S.pick.indexOf(k);
+    if (i >= 0) {
+      S.pick.splice(i, 1);
+      return;
+    }
+    const d = DAILY.find((x) => x.k === k);
+    if (
+      !d ||
+      !avail(d) ||
+      !sickOK(d) ||
+      S.cnt[k] >= 1 ||
+      S.pick.length >= slots() ||
+      (d.e.money < 0 && pickCost(S.pick.concat([k])) > S.money)
+    )
+      return;
+    S.pick.push(k);
+  });
+  G.go = act(() => {
+    if (blocked() || S.pick.length !== slots() || pickCost(S.pick) > Math.max(0, S.money)) return;
+    const ks = S.pick.slice();
+    S.pick = [];
+    // 先做赚钱的，免得顺序导致钱不够
+    ks.sort(
+      (a, b) =>
+        (DAILY.find((x) => x.k === b).e.money || 0) - (DAILY.find((x) => x.k === a).e.money || 0),
+    );
+    for (const k of ks) {
+      if (blocked()) break;
+      doDaily(k);
+    }
+    S.result = "本月安排：" + ks.map((k) => DAILY.find((x) => x.k === k).n).join("、");
+  });
+  G.ask = act((i) => {
+    if (!S.ask || S.crisis || S.notices.length) return;
+    const a = S.ask;
+    if (a.kind === "breakup") {
+      if (i === 0) {
+        if (S.money < 300) return;
+        S.ask = null;
+        S.money -= 300;
+        S.noDate = 0;
+        log("送礼物挽回对象：金钱-300");
+        notice(
+          "挽回",
+          "你挑了很久的礼物，又道了歉。对方叹了口气，说再给你一次机会。<br><b>金钱-300</b>",
+        );
+      } else {
+        S.ask = null;
+        const r = applyEff({ mood: -10, res: 2 }, true);
+        S.partner = false;
+        S.ex = false;
+        log("分手：" + r);
+        notice("分手", "“你眼里只有论文。”<br><b>" + r + "</b>");
+      }
+      if (slots() <= 0 && S.step === "daily") afterDailies();
+      checks();
+      return;
+    }
+    S.ask = null;
+    if (a.kind === "meet") {
+      if (i === 0) {
+        S.nights++;
+        S.mres = (S.mres || 0) + 1;
+        const r = applyEff({ health: -4, mood: -2, hair: -2, progress: 6 }, false);
+        log("熬夜赶进度：" + r);
+        notice("熬夜赶进度", "凌晨三点，你对着屏幕把图一张张贴进 PPT。<br><b>" + r + "</b>");
+      }
+      meeting();
+      return;
+    }
+    if (a.kind === "stay") {
+      if (i === 0) {
+        const r = applyEff({ trust: 3, mood: -3 }, false);
+        log("寒假留校：" + r);
+        notice(
+          "寒假留校",
+          "空荡荡的实验室里只剩你和服务器的风扇声。这个月照常安排四周。<br><b>" + r + "</b>",
+        );
+      } else {
+        const r = applyEff({ mood: 8, health: 3 }, false);
+        S.week = Math.min(5, S.week + 2);
+        S.pick = S.pick.slice(0, slots());
+        log("回家过年：" + r);
+        notice(
+          "回家过年",
+          "家里的饭菜比食堂香一百倍。假期占掉两周，这个月只剩两周可以安排。<br><b>" + r + "</b>",
+        );
+      }
+      if (slots() <= 0 && S.step === "daily") afterDailies();
+      checks();
+    }
+  });
+  function landed() {
+    const cat = BOARD[S.pos];
+    const ev = pickEvent(cat);
+    S.ev = ev.id;
+    S.lastEv = ev.id;
+    if (!M.events[ev.id]) {
+      M.events[ev.id] = 1;
+      saveMeta();
+    }
+    S.step = "event";
+    if (ev.o.length === 1) settle(ev, ev.o[0], true);
+  }
+  G.roll = function () {
+    if (S.step !== "roll" || S.screen !== "main" || S.crisis || S.notices.length || S.anim) return;
+    const N = BOARD.length,
+      d = rnd(6) + 1;
+    S.dice = d;
+    S.d1 = d;
+    S.d2 = 0;
+    const target = (S.pos + d) % N;
+    const still =
+      typeof document === "undefined" ||
+      (typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches);
+    if (still) {
+      S.pos = target;
+      landed();
+      save();
+      render();
+      return;
+    }
+    S.anim = true;
+    S.result = "掷出 " + d + "，前进 " + d + " 步";
+    render();
+    let n = d;
+    const tick = () => {
+      S.pos = (S.pos + 1) % N;
+      n--;
+      render();
+      if (n > 0) setTimeout(tick, 80);
+      else
+        setTimeout(() => {
+          S.anim = false;
+          landed();
+          save();
+          render();
+        }, 160);
+    };
+    setTimeout(tick, 120);
+  };
+  function settle(ev, o, single) {
+    let r = applyEff(o.e, true);
+    if (o.fn) {
+      const x = o.fn(S);
+      if (x) r = r ? r + "；" + x : x;
+    }
+    r = r || "没有任何变化";
+    S.result = "掷出 " + S.d1 + " · " + ev.n + (single ? "" : " → " + o.t) + "：" + r;
+    log(S.result);
+    notice(
+      ev.n,
+      (single ? evImgs(ev.id) + ev.d : "你选择了「" + o.t + "」。" + (o.r || "")) +
+        "<br><b>" +
+        r +
+        "</b>",
+    );
+    S.rolls = (S.rolls || 0) + 1;
+    if (S.rolls >= 2) endWeek();
+    else {
+      S.step = "roll";
+      S.ev = null;
+    }
+  }
+  G.opt = act((i) => {
+    if (S.step !== "event") return;
+    const ev = EVENTS.find((e) => e.id === S.ev);
+    const o = ev.o[i];
+    if ((o.req && !o.req(S)) || !canPay(o.e)) return;
+    settle(ev, o, false);
+  });
+  G.closeNotice = act(() => {
+    S.notices.shift();
+  });
+  G.modal = act((m) => {
+    S.modal = m;
+    S.open = null;
+  });
+  G.open = act((t, id) => {
+    S.open = t ? { t: t, id: id } : null;
+  });
+  G.nav = act((d) => {
+    const o = S.open;
+    if (!o) return;
+    const L = albumList(o.t);
+    if (!L.length) return;
+    const i = L.indexOf(o.id);
+    o.id = L[(i + d + L.length) % L.length];
+  });
+  G.newPaper = act((lv) => {
+    const c = PAPER[lv];
+    if (
+      S.papers.filter((p) => p.status !== "accepted" && !p.collab).length >= 2 ||
+      S.a.progress < c.cost
+    )
+      return;
+    S.draft = { lv: lv, title: genTitle() };
+    S.modal = "title";
+  });
+  G.retitle = act(() => {
+    if (S.draft) S.draft.title = genTitle();
+  });
+  G.okPaper = act(() => {
+    const d = S.draft;
+    if (!d) return;
+    const c = PAPER[d.lv];
+    if (
+      S.papers.filter((p) => p.status !== "accepted" && !p.collab).length >= 2 ||
+      S.a.progress < c.cost
+    ) {
+      S.draft = null;
+      S.modal = "paper";
+      return;
+    }
+    const el = typeof document !== "undefined" && document.getElementById("pt");
+    const title = ((el ? el.value : d.title) || "").trim().slice(0, 40) || d.title;
+    S.a.progress -= c.cost;
+    S.papers.push({
+      id: ++S.pid,
+      lv: d.lv,
+      title: title,
+      stage: 1,
+      status: "doing",
+      rej: 0,
+      subs: 0,
+      due: 0,
+    });
+    log("论文 #" + S.pid + "《" + title + "》定题，目标 CCF-" + d.lv);
+    S.draft = null;
+    S.modal = "paper";
+  });
+  G.advance = act((id) => {
+    const p = S.papers.find((x) => x.id === id);
+    const c = PAPER[p.lv];
+    if (p.stage >= NS || p.status !== "doing" || S.a.progress < c.cost) return;
+    S.a.progress -= c.cost;
+    p.stage++;
+    log("论文 #" + id + " 完成「" + STAGES[p.stage - 1] + "」");
+  });
+  G.submit = act((id) => {
+    const p = S.papers.find((x) => x.id === id);
+    if (p.stage < NS || p.status !== "doing") return;
+    p.status = "submitted";
+    p.subs++;
+    p.due = S.month + 1;
+    log("论文 #" + id + " 已投稿，下月初出结果");
+  });
+  G.revise = act((id) => {
+    const p = S.papers.find((x) => x.id === id);
+    if (!p || p.status !== "rejected") return;
+    p.status = "doing";
+    p.stage = 2;
+    log("论文 #" + id + " 被拒后退回「算法」阶段重做");
+  });
+  G.downgrade = act((id, lv) => {
+    const p = S.papers.find((x) => x.id === id);
+    if (p.status !== "rejected" || DOWN[lv] <= DOWN[p.lv]) return;
+    log("论文 #" + id + " 从 CCF-" + p.lv + " 降档转投 CCF-" + lv);
+    p.lv = lv;
+    p.fix = lv === "B" ? 90 : 100;
+    p.status = "submitted";
+    p.subs++;
+    p.due = S.month + 1;
+  });
+  G.love = act((k) => {
+    const T = {
+      date: [100, { mood: 4, res: 1 }, "约会"],
+      gift: [200, { mood: 3, luck: 1 }, "送礼物"],
+      trip: [600, { mood: 8, health: 2 }, "一起去旅游"],
+    }[k];
+    if (!T || !S.partner || S.dates >= 2 || S.money < T[0] || (S.loveDone && S.loveDone[k])) return;
+    S.money -= T[0];
+    const r = applyEff(T[1], false);
+    S.dates++;
+    S.noDate = 0;
+    S.loveDone = S.loveDone || {};
+    S.loveDone[k] = 1;
+    log("和对象" + T[2] + "：金钱-" + T[0] + "，" + r);
+    S.result = "和对象" + T[2] + "：金钱-" + T[0] + "，" + r;
+    S.loveMsg = "已经" + T[2] + "：金钱-" + T[0] + "，" + r;
+  });
+  G.date = act(() => {
+    G.love("date");
+  });
+  G.split = act((m) => {
+    if (!S.partner) return;
+    if (m === "nice") {
+      if (S.money < 300) return;
+      S.money -= 300;
+      S.partner = false;
+      S.ex = true;
+      S.a.mood = clamp(S.a.mood - 3);
+      S.loveMsg = "你们好聚好散了：金钱-300，心情-3";
+      log("和对象好聚好散：金钱-300，心情-3");
+    } else {
+      S.partner = false;
+      S.ex = false;
+      S.a.mood = clamp(S.a.mood - 6);
+      log("和对象直接分手：心情-6");
+      notice("分手了", "你们没有再联系。<br><b>心情-6</b>");
+    }
+    checks();
+  });
+  G.back = act(() => {
+    if (!S.ex || S.money < 300) return;
+    S.money -= 300;
+    S.ex = false;
+    S.partner = true;
+    S.noDate = 0;
+    S.loveMsg = "你们重新在一起了：金钱-300";
+    log("挽回了对象：金钱-300");
+  });
+  G.transfer = act(() => {
+    if (S.step !== "daily") return;
+    S.pick = [];
+    const ok = transfer();
+    S.modal = null;
+    S.result = "日常 · 申请转组";
+    S.week++;
+    if (S.week > 4) afterDailies();
+    if (ok) {
+      log("转组成功");
+      notice(
+        "转组成功",
+        "你换到了「" +
+          S.mentor.name +
+          "」门下。科研进展、导师心腹、同辈忮忌清零，手上的论文全部作废。",
+      );
+    } else {
+      log("转组失败");
+      notice("转组失败", "新导师没有名额。健康和心情白白消耗了，日子还得继续。");
+    }
+    checks();
+  });
+  G.crisis = act((a) => {
+    const c = S.crisis;
+    if (a === "quit") {
+      end("quit");
+      return;
+    }
+    if (a === "stay") {
+      S.crisis = null;
+      return;
+    }
+    const ok = transfer();
+    S.crisis = null;
+    if (ok) {
+      log("转组成功");
+      notice(
+        "转组成功",
+        "你换到了「" +
+          S.mentor.name +
+          "」门下，一切重新开始。科研进展、导师心腹、同辈忮忌清零，论文作废。",
+      );
+    } else {
+      log("转组失败");
+      notice("转组失败", "新导师没有名额，只能继续硬撑。");
+      checks();
+    }
+  });
+  G.path = act((k) => {
+    const r = resumeData();
+    let e;
+    if (k === "job") e = r.score >= 3 ? (r.hasB ? "bigco" : "job") : "home";
+    else if (k === "cn") e = r.hasB ? "phdcn" : "home";
+    else e = r.hasA ? "phdab" : "home";
+    end(e);
+    if (e === "phdcn")
+      S.ending.x =
+        "导师" +
+        (S.a.trust >= 60
+          ? "全力推荐，你去了顶尖高校"
+          : S.a.trust >= 30
+            ? "帮忙打了招呼，你去了重点高校"
+            : "没怎么出力，你去了一所普通高校") +
+        "读博。" +
+        S.ending.x;
+    if (e === "phdab") {
+      const L = Math.max(1, S.mentor.letter - (S.a.trust < 30 ? 1 : 0));
+      S.ending.x =
+        "导师推荐信的分量是 " +
+        L +
+        " 分（满分 3 分），你去了" +
+        (L >= 3 ? "一所顶尖名校" : L === 2 ? "一所不错的学校" : "一所普通学校") +
+        "。" +
+        S.ending.x;
+    }
+    if (e === "home" && k !== "job")
+      S.ending.x = "论文没达到申博门槛，申请全部被拒，工作也错过了。先回家歇一歇吧。";
+  });
+
+  /* ================================================================
+   * 界面：把当前状态画成 HTML（主页面、弹窗、图鉴、简历）
+   * ================================================================ */
+  function attrsHtml(keys, src, one) {
+    const A = src || S.a;
+    return (
+      '<div class="attrs' +
+      (one ? " one" : "") +
+      '">' +
+      (keys || ORDER)
+        .map((k) => {
+          const v = Math.floor(A[k]);
+          const cls =
+            (k === "envy" ? " bad" : "") +
+            ((k === "health" || k === "mood") && v < 30 ? " low" : "") +
+            (k === "ability" || k === "trust" || k === "progress" ? " sci" : "");
+          return (
+            '<div class="attr' +
+            cls +
+            '"><span>' +
+            LBL[k] +
+            '</span><i><u style="width:' +
+            v +
+            '%"></u></i><span>' +
+            v +
+            "</span></div>"
+          );
+        })
+        .join("") +
+      "</div>"
+    );
+  }
+  function optBtn(i, call, title, sub, dis, cost) {
+    return (
+      '<button class="opt" onclick="' +
+      call +
+      '"' +
+      (dis ? " disabled" : "") +
+      '><span class="badge">' +
+      "甲乙丙丁"[i] +
+      "</span><div>" +
+      title +
+      (cost ? '<small class="cost">' + cost + "</small>" : "") +
+      (sub ? "<small>" + sub + "</small>" : "") +
+      "</div></button>"
+    );
+  }
+  function effParts(e) {
+    const r = {};
+    for (const k in e) if (k !== "money" || e[k] > 0) r[k] = e[k];
+    return { cost: e.money < 0 ? "花费 " + -e.money + " 元" : "", eff: effText(r) };
+  }
+  function tilePos(i) {
+    const N = 10;
+    if (i < N) return [1, i + 1];
+    if (i < 2 * N - 1) return [i - N + 2, N];
+    if (i < 3 * N - 2) return [N, 3 * N - 2 - i];
+    return [4 * N - 3 - i, 1];
+  }
+  function nextStone() {
+    const L = [
+      [10, "开题"],
+      [22, "中期考核"],
+      [25, "秋招"],
+      [33 + 6 * S.ext, "答辩"],
+      [END_M + 1 + 6 * S.ext, "毕业结算"],
+    ];
+    for (const x of L) {
+      if (x[0] > S.month) return "距" + x[1] + "还有 " + (x[0] - S.month) + " 个月";
+    }
+    return "";
+  }
+  function ssn() {
+    const c = ((S.month + 7) % 12) + 1;
+    return c >= 3 && c <= 5
+      ? "spring"
+      : c >= 6 && c <= 8
+        ? "summer"
+        : c >= 9 && c <= 11
+          ? "fall"
+          : "winter";
+  }
+  function boardHtml() {
+    const m_ = S.month,
+      w =
+        m_ <= 11
+          ? (m_ / 11) * 12
+          : m_ <= 23
+            ? m_ - 11
+            : m_ <= END_M
+              ? ((m_ - 23) / 11) * 12
+              : (((m_ - END_M - 1) % 6) + 1) * 2;
+    let h = '<div class="board s-' + ssn() + '">';
+    BOARD.forEach((c, i) => {
+      const p = tilePos(i);
+      h +=
+        '<div class="tile t-' +
+        c +
+        (i === S.pos ? " here" : "") +
+        '" style="grid-row:' +
+        p[0] +
+        ";grid-column:" +
+        p[1] +
+        '">' +
+        TILE[c] +
+        (i === S.pos ? '<span class="pawn" aria-label="你的位置">🧑‍🎓</span>' : "") +
+        "</div>";
+    });
+    const canRoll = S.step === "roll",
+      canDay = S.step === "daily";
+    const tip = canDay
+      ? "先排完日常"
+      : canRoll
+        ? "第 " + ((S.rolls || 0) + 1) + "/2 次"
+        : S.step === "meet"
+          ? "组会中"
+          : "事件中";
+    h +=
+      '<div class="mid"><div class="mtop"><p class="mdate"><b>' +
+      dateStr(S.month) +
+      "</b> · " +
+      nextStone() +
+      '</p><div class="bar"><u style="width:' +
+      Math.round((w / 12) * 100) +
+      '%"></u></div></div>' +
+      '<div class="mimg"></div>' +
+      '<div class="mbot"><div class="mbtns"><button class="daybtn" onclick="G.modal(\'daily\')"' +
+      (canDay ? "" : " disabled") +
+      ">📅 日常<small>" +
+      (canDay ? S.week - 1 + "/4 已排" : "本月已排") +
+      "</small></button>" +
+      '<button class="rollbtn" onclick="G.roll()"' +
+      (canRoll ? "" : " disabled") +
+      ' aria-label="掷骰子">🎲 随机<small>' +
+      tip +
+      "</small></button></div>" +
+      '<p class="muted res">' +
+      (S.result || "每月先安排四周的日常，月底开组会，再掷两次骰子。") +
+      "</p></div></div></div>";
+    return h;
+  }
+  function loveHtml() {
+    if (!S.partner && !S.ex) return "";
+    const D = S.loveDone || {};
+    const b = (k, n, c, e) => {
+      const done = D[k],
+        full = !done && S.dates >= 2,
+        poor = !done && !full && S.money < c;
+      return (
+        "<button onclick=\"G.love('" +
+        k +
+        "')\"" +
+        (done || full || poor ? " disabled" : "") +
+        ">" +
+        n +
+        (done ? " ✓" : "") +
+        '<small class="cost">花费 ' +
+        c +
+        " 元</small><small>" +
+        (done ? "这个月已经做过了" : full ? "这个月的两次互动用完了" : poor ? "钱不够" : e) +
+        "</small></button>"
+      );
+    };
+    const msg = S.loveMsg ? '<p class="result">' + S.loveMsg + "</p>" : "";
+    return (
+      '<h3 class="sub">💕 对象</h3>' +
+      (S.partner
+        ? '<p class="muted">有对象每月心情+3。下面的互动只花钱，不占这个月的活动次数，点了立刻生效，每月最多两次（本月 ' +
+          S.dates +
+          "/2）。连续两个月不互动，对方会提分手。</p>" +
+          msg +
+          '<div class="grid2">' +
+          b("date", "约会", 100, effText(realEff({ mood: 4, res: 1 }))) +
+          b("gift", "送礼物", 200, effText(realEff({ mood: 3, luck: 1 }))) +
+          b("trip", "一起去旅游", 600, effText(realEff({ mood: 8, health: 2 }))) +
+          "<button onclick=\"G.split('nice')\"" +
+          (S.money >= 300 ? "" : " disabled") +
+          '>好聚好散<small class="cost">花费 300 元</small><small>心情-3，以后还能挽回</small></button>' +
+          "<button onclick=\"G.split('cold')\">直接分手<small>心情-6，对方从此消失</small></button></div>"
+        : msg +
+          '<p class="muted">你们已经好聚好散。想挽回的话，随时可以。</p><button onclick="G.back()"' +
+          (S.money >= 300 ? "" : " disabled") +
+          '>挽回<small class="cost">花费 300 元</small><small>重新在一起</small></button>')
+    );
+  }
+  function resumeHtml() {
+    const r = resumeData();
+    const L = [];
+    r.acc.forEach((p) =>
+      L.push("CCF-" + p.lv + "《" + esc(p.title || "未命名") + "》（" + roleName(p) + "，已接收）"),
+    );
+    r.sub.forEach((p) =>
+      L.push(
+        "CCF-" +
+          p.lv +
+          "《" +
+          esc(p.title || "未命名") +
+          "》（" +
+          roleName(p) +
+          "，" +
+          (p.status === "submitted" ? "在投" : "被拒 " + p.rej + " 次") +
+          "）",
+      ),
+    );
+    if (S.comps && S.comps.length) S.comps.forEach((c) => L.push("在「" + c + "」实习三个月"));
+    else if (S.interns) L.push("实习 " + S.interns + " 段");
+    if (S.hx) L.push("参与导师横向项目 " + S.hx + " 次");
+    if (S.applies) L.push("投出简历 " + S.applies + " 轮");
+    if (S.transfers) L.push("转组 " + S.transfers + " 次");
+    if (!L.length) L.push("一片空白");
+    return "<ul>" + L.map((x) => "<li>" + x + "</li>").join("") + "</ul>";
+  }
+  function paperHtml() {
+    const active = S.papers.filter((p) => p.status !== "accepted" && !p.collab).length;
+    const bs = blindScore(false);
+    const T = (ok) =>
+      ok ? '<span class="tag good">已满足</span>' : '<span class="tag bad">未满足</span>';
+    let h =
+      '<h2>论文</h2><p class="story">毕业要同时满足两个条件：<br>① 导师的要求：至少发表一篇 CCF-' +
+      reqLv() +
+      "。" +
+      T(reqOK()) +
+      "<br>② 盲审过 80 分：按现在的进度预计 <b>" +
+      bs +
+      "</b> 分上下（有正负 3 分的波动，到 83 分才稳）。" +
+      T(bs >= 83) +
+      '</p><p class="muted">可用科研进展 <b>' +
+      S.a.progress +
+      "</b>。CCF-C 主要用来给毕业论文凑分数，导师的要求得靠更高档的论文。</p>";
+    S.papers.forEach((p) => {
+      const c = PAPER[p.lv];
+      const st =
+        STAGES.map(
+          (s, i) =>
+            '<span class="' +
+            (i < p.stage ? "on" : i === p.stage ? "now" : "") +
+            '">' +
+            s +
+            "</span>",
+        ).join("") +
+        '<span class="' +
+        (p.subs > 0 ? "on" : p.stage >= NS ? "now" : "") +
+        '">投稿</span><span class="' +
+        (p.status === "accepted" ? "on" : "") +
+        '">接收</span>';
+      let btn = "";
+      if (p.status === "doing" && p.stage < NS)
+        btn =
+          '<button onclick="G.advance(' +
+          p.id +
+          ')"' +
+          (S.a.progress < c.cost ? " disabled" : "") +
+          ">完成「" +
+          STAGES[p.stage] +
+          "」<small>消耗科研进展 " +
+          c.cost +
+          "</small></button>";
+      else if (p.status === "doing")
+        btn =
+          '<button onclick="G.submit(' +
+          p.id +
+          ')">' +
+          (p.rej ? "重新投稿" : "投稿") +
+          "<small>接收概率 " +
+          paperProb(p) +
+          "%，下月初出结果</small></button>";
+      else if (p.status === "submitted")
+        btn =
+          '<p class="muted">' +
+          (p.collab
+            ? "同门负责投稿，" + (p.due > S.month + 1 ? "两个月内" : "下月初") + "出结果。"
+            : "审稿中，下月初出结果。") +
+          "</p>";
+      else if (p.status === "rejected") {
+        btn =
+          '<button onclick="G.revise(' +
+          p.id +
+          ')">退回「算法」阶段重做<small>要重做算法、实验、写作；再投 CCF-' +
+          p.lv +
+          " 的接收概率 " +
+          paperProb(p) +
+          "%</small></button>";
+        if (p.lv === "A")
+          btn +=
+            '<button onclick="G.downgrade(' +
+            p.id +
+            ",'B')\">降档转投 CCF-B<small>不用改，接收概率 90%</small></button>";
+        if (p.lv !== "C")
+          btn +=
+            '<button onclick="G.downgrade(' +
+            p.id +
+            ",'C')\">降档转投 CCF-C<small>不用改，接收概率 100%</small></button>";
+      } else btn = '<p class="muted">已接收，写进简历了。</p>';
+      h +=
+        '<div class="paper"><div class="chips"><span class="chip up">CCF-' +
+        p.lv +
+        '</span><span class="chip ' +
+        (p.stolen || p.role === "second" ? "down" : "") +
+        '">' +
+        roleName(p) +
+        "</span>" +
+        (p.collab ? '<span class="chip">与同门合作</span>' : "") +
+        '<span class="chip lock">#' +
+        p.id +
+        '</span></div><div class="top"><h3>《' +
+        esc(p.title || "未命名") +
+        "》</h3>" +
+        (p.rej ? '<span class="tag bad">返修或被拒 ' + p.rej + " 次</span>" : "") +
+        '</div><div class="stages">' +
+        st +
+        "</div>" +
+        btn +
+        "</div>";
+    });
+    if (active < 2) {
+      h +=
+        '<h3>开一篇新论文</h3><div class="col">' +
+        ["C", "B", "A"]
+          .map((lv) => {
+            const c = PAPER[lv];
+            return (
+              "<button onclick=\"G.newPaper('" +
+              lv +
+              "')\"" +
+              (S.a.progress < c.cost ? " disabled" : "") +
+              ">CCF-" +
+              lv +
+              "<small>每阶段消耗 " +
+              c.cost +
+              "，首投接收率 " +
+              c.ps[0] +
+              "%</small></button>"
+            );
+          })
+          .join("") +
+        "</div>";
+    } else h += '<p class="muted">最多同时做两篇。</p>';
+    return h + '<button class="ghost" onclick="G.modal(null)">返回日常</button>';
+  }
+  function overlay(inner) {
+    return '<div class="overlay"><div class="card">' + inner + "</div></div>";
+  }
+  function overlayC(inner, cls) {
+    return (
+      '<div class="overlay' +
+      (cls ? " " + cls : "") +
+      '" onclick="if(event.target===this)G.modal(null)"><div class="card">' +
+      inner +
+      "</div></div>"
+    );
+  }
+  function mainHtml() {
+    const tp = Math.round(Math.min(0.9, 0.5 + S.a.luck / 500) * 100);
+    const stu = STUDENTS[S.stu] || { tag: "" };
+    let h =
+      '<div class="top strip"><b>' +
+      dateStr(S.month) +
+      '</b><span class="money">' +
+      (S.money < 0 ? "欠债 " + -S.money : "¥ " + S.money) +
+      "</span></div>";
+    if (S.note) h += '<p class="muted strip clamp1">' + S.note + "</p>";
+    h +=
+      '<div class="card slim"><div class="top"><span><span class="muted">导师</span> <b class="nm">' +
+      S.mentor.name +
+      '</b></span><span class="tag mid">劳务费 ' +
+      S.mentor.stipend +
+      "/月</span></div></div>";
+    h +=
+      '<div class="card"><div class="top"><span class="who"><b>' +
+      esc(S.name) +
+      '</b> <span class="tag mid">' +
+      stu.tag +
+      "</span>" +
+      (S.partner ? ' <span class="tag good">有对象</span>' : "") +
+      (S.ext ? ' <span class="tag bad">延毕 ' + S.ext + " 次</span>" : "") +
+      '</span><button class="mini" onclick="G.modal(\'me\')">详情</button></div>' +
+      attrsHtml(["health", "mood"], null, true) +
+      '<div class="chips">' +
+      ["res", "hair", "rel", "scheme", "luck"]
+        .map((k) => '<span class="chip">' + LBL[k] + " <b>" + Math.floor(S.a[k]) + "</b></span>")
+        .join("") +
+      "</div></div>";
+    h +=
+      '<div class="tiles3">' +
+      ["ability", "trust", "envy"]
+        .map(
+          (k) =>
+            '<div class="stat' +
+            (k === "envy" ? " bad" : "") +
+            '"><span>' +
+            LBL[k] +
+            "</span><b>" +
+            Math.floor(S.a[k]) +
+            '</b><i class="bar"><u style="width:' +
+            S.a[k] +
+            '%"></u></i></div>',
+        )
+        .join("") +
+      "</div>";
+    h += boardHtml();
+    h +=
+      '<div class="dock"><nav class="nav"><button' +
+      (S.a.progress >= 100 ? ' class="go"' : "") +
+      " onclick=\"G.modal('paper')\">📄 论文<small>" +
+      (S.a.progress >= 100 ? "进展满了，快去用" : "进展 " + S.a.progress) +
+      "</small></button>" +
+      "<button onclick=\"G.modal('log')\">📜 记录<small>最近的事</small></button><button onclick=\"G.modal('album')\">🏆 图鉴<small>成就 结局</small></button><button onclick=\"G.modal('settings')\">⚙️ 设置<small>存档</small></button></nav></div>";
+    if (S.crisis === "mood")
+      h += overlay(
+        '<h2>情绪亮红灯</h2><p class="story">心情已经低于 30。<span class="hl">降到 0 就要休学了。</span>关心一下自己的心理健康：是换个环境，还是先停一停？</p>' +
+          optBtn(0, "G.crisis('stay')", "先调整一下", "多睡觉、多见朋友、少做点科研") +
+          optBtn(1, "G.crisis('transfer')", "申请转组", "健康-10，心情-10，失败照常继续") +
+          optBtn(2, "G.crisis('quit')", "退学", ""),
+      );
+    else if (S.crisis === "health")
+      h += overlay(
+        '<h2>身体亮红灯</h2><p class="story">健康已经低于 30。<span class="hl">降到 0 会被送进医院，只能休学养病。</span>关心一下自己的身体：是换个环境，还是先歇一歇？</p>' +
+          optBtn(0, "G.crisis('stay')", "先养一养", "多睡觉、多健身") +
+          optBtn(1, "G.crisis('transfer')", "申请转组", "健康-10，心情-10，失败照常继续") +
+          optBtn(2, "G.crisis('quit')", "退学", ""),
+      );
+    else if (S.notices.length)
+      h += overlay(
+        "<h2>" +
+          S.notices[0].t +
+          '</h2><p class="story">' +
+          S.notices[0].x +
+          '</p><button class="primary" onclick="G.closeNotice()">知道了</button>',
+      );
+    else if (S.ask && S.ask.kind === "meet")
+      h += overlay(
+        '<h2>组会前夜</h2><p class="story">明天就是组会。本月的科研进展似乎不足，要不要熬夜赶一赶？</p>' +
+          optBtn(0, "G.ask(0)", "熬夜赶进度", "") +
+          optBtn(1, "G.ask(1)", "就这样去汇报", ""),
+      );
+    else if (S.ask && S.ask.kind === "stay")
+      h += overlay(
+        '<h2>寒假到了</h2><p class="story">寒假只有两周。导师在群里问：“过年有谁留校？”</p>' +
+          optBtn(0, "G.ask(0)", "留校", "这个月照常安排四周") +
+          optBtn(1, "G.ask(1)", "回家过年", "这个月只剩两周可以安排"),
+      );
+    else if (S.ask && S.ask.kind === "breakup")
+      h += overlay(
+        '<h2>对象提出分手</h2><p class="story">“你已经两个月没理我了。”</p>' +
+          optBtn(
+            0,
+            "G.ask(0)",
+            "送礼物挽回",
+            "",
+            S.money < 300,
+            "花费 300 元" + (S.money < 300 ? "（钱不够）" : ""),
+          ) +
+          optBtn(1, "G.ask(1)", "那就分手吧", ""),
+      );
+    else if (S.step === "event") {
+      const ev = EVENTS.find((e) => e.id === S.ev);
+      h += overlay(
+        '<div class="top"><span class="tag ' +
+          ev.tone +
+          '">' +
+          CATS[ev.c] +
+          '事件</span><span class="muted">掷出 ' +
+          S.dice +
+          " · 走到「" +
+          TILE[ev.c] +
+          "」格</span></div>" +
+          evImgs(ev.id) +
+          "<h2>" +
+          ev.n +
+          '</h2><p class="story">' +
+          ev.d +
+          '</p><div class="col">' +
+          ev.o
+            .map((o, i) => {
+              const lock = o.req && !o.req(S);
+              const dis = lock || !canPay(o.e);
+              const p = effParts(o.e);
+              return optBtn(
+                i,
+                "G.opt(" + i + ")",
+                o.t,
+                o.reqT || "",
+                dis,
+                p.cost + (p.cost && !canPay(o.e) ? "（钱不够）" : ""),
+              );
+            })
+            .join("") +
+          "</div>",
+      );
+    } else if (S.modal === "daily" && S.step === "daily") {
+      const n = slots();
+      const cost = pickCost(S.pick);
+      h += overlayC(
+        '<div class="top"><h2>' +
+          dateStr(S.month) +
+          '的活动</h2><button class="mini" onclick="G.modal(null)">关闭</button></div><p class="muted">这个月要排 ' +
+          n +
+          " 件事，每件事每月只能做一次。默认保留上个月的选择，点一下取消，再点别的换掉。</p>" +
+          (S.month === 10 || S.month === 22
+            ? '<p class="story">本月是' +
+              (S.month === 10 ? "开题" : "中期考核") +
+              "，导师已经找你谈过话，详情在「记录」里。</p>"
+            : "") +
+          loveHtml() +
+          ["科研", "社交", "休养"]
+            .map(
+              (g) =>
+                '<h3 class="sub">' +
+                g +
+                '</h3><div class="grid2">' +
+                (g === "科研"
+                  ? S.fixed
+                      .map(
+                        (f) =>
+                          '<button class="sel" disabled>' +
+                          f +
+                          "<small>" +
+                          (f === "上课"
+                            ? "研一必修，科研能力+0.3"
+                            : f === "横向"
+                              ? "导师派的，金钱+200 健康-2"
+                              : "实习期间，工资 200") +
+                          "</small><small>固定占一件事</small></button>",
+                      )
+                      .join("")
+                  : "") +
+                DAILY.filter((d) => d.g === g && avail(d))
+                  .map((d) => {
+                    const on = S.pick.indexOf(d.k) >= 0;
+                    const p = effParts(realEff(dailyEff(d)));
+                    const dis =
+                      !on &&
+                      (!sickOK(d) ||
+                        S.pick.length >= n ||
+                        (S.cnt[d.k] || 0) >= 1 ||
+                        (d.e.money < 0 && cost - d.e.money > S.money));
+                    return (
+                      '<button class="' +
+                      (on ? "sel" : "") +
+                      '" onclick="G.pick(\'' +
+                      d.k +
+                      "')\"" +
+                      (dis ? " disabled" : "") +
+                      ">" +
+                      d.n +
+                      (p.cost ? '<small class="cost">' + p.cost + "</small>" : "") +
+                      (d.rnd ? '<small class="cost">随机花 10–100 元</small>' : "") +
+                      "<small>" +
+                      (sickOK(d) ? p.eff : "健康低于 50 才能去") +
+                      "</small></button>"
+                    );
+                  })
+                  .join("") +
+                "</div>",
+            )
+            .join("") +
+          '<h3 class="sub">其他</h3><button onclick="G.modal(\'transfer\')">申请转组<small>占掉一件事 · 健康-10 心情-10 · 成功率约 ' +
+          tp +
+          "%</small></button>" +
+          '<div class="gobar"><span class="muted">已选 ' +
+          S.pick.length +
+          "/" +
+          n +
+          (cost ? " · 共花费 " + cost + " 元" : "") +
+          '</span><button class="primary" onclick="G.go()"' +
+          (S.pick.length === n && cost <= Math.max(0, S.money) ? "" : " disabled") +
+          ">" +
+          (cost > Math.max(0, S.money) ? "钱不够，先取消几项花钱的" : "就这么安排") +
+          "</button></div>",
+      );
+    } else if (S.modal === "me")
+      h += overlayC(
+        '<div class="top"><h2>' +
+          esc(S.name) +
+          '</h2><button class="mini" onclick="G.modal(null)">关闭</button></div>' +
+          attrsHtml(["health", "mood", "res", "hair", "rel", "scheme", "luck"], null, true) +
+          '<h3 class="sub">科研与组内</h3>' +
+          attrsHtml(["ability", "progress", "trust", "envy"], null, true) +
+          '<ul class="muted"><li>记得多关心自己。心情或健康过低时，每次行动获得的科研进展减少。心情归零会休学回家，健康归零则原地飞升。</li><li>心态越差，遭遇坏事件会导致心情变差更多；心态好了，每个月心情自然上升。</li><li>科研能力提高后，科研进展也提升得更快。</li><li>人品好可以提高论文接收率和转组成功率，多做好事吧。</li><li>城府提高后可以更好地应对办公室政治；同辈忮忌越高越容易被同门坑。</li></ul>',
+      );
+    else if (S.modal === "paper") h += overlayC(paperHtml());
+    else if (S.modal === "title" && S.draft)
+      h += overlayC(
+        '<h2>给论文起个标题</h2><p class="muted">目标 CCF-' +
+          S.draft.lv +
+          "，定题消耗科研进展 " +
+          PAPER[S.draft.lv].cost +
+          '。标题会写进简历和结局。</p><div class="namebar"><input type="text" id="pt" maxlength="40" aria-label="论文标题" value="' +
+          esc(S.draft.title) +
+          '"><button class="mini" onclick="G.retitle()">换一个</button></div><div class="actions"><button class="big" onclick="G.modal(\'paper\')">返回</button><button class="big roll" onclick="G.okPaper()">就叫这个</button></div>',
+      );
+    else if (S.modal === "album") h += overlayC(albumHtml(), S.open && S.open.t ? "pin" : "");
+    else if (S.modal === "settings")
+      h += overlayC(
+        '<div class="top"><h2>设置</h2><button class="mini" onclick="G.modal(null)">关闭</button></div><p class="story">进度会自动保存在这台设备的浏览器里，下次打开可以接着玩。图鉴、成就和历史记录跨局保留。</p><button onclick="G.modal(\'quit\')">放弃这一局，重新入学<small>当前进度会丢失，图鉴和成就不受影响</small></button>',
+      );
+    else if (S.modal === "quit")
+      h += overlayC(
+        '<h2>确定重新入学？</h2><p class="story">这一局的进度会清空，不会记入历史记录。</p><div class="actions"><button class="big" onclick="G.modal(\'settings\')">再想想</button><button class="big roll" onclick="G.restart()">确定</button></div>',
+      );
+    else if (S.modal === "log")
+      h += overlayC(
+        '<div class="top"><h2>最近发生的事</h2><button class="mini" onclick="G.modal(null)">关闭</button></div><div class="log">' +
+          (S.log
+            .slice()
+            .reverse()
+            .map((x) => "<span>" + x + "</span>")
+            .join("") || "<span>还什么都没发生。</span>") +
+          "</div>",
+      );
+    else if (S.modal === "transfer" && S.step === "daily")
+      h += overlayC(
+        '<h2>申请转组</h2><p class="story">占用本月的一件日常，消耗健康 10、心情 10。成功后换导师，科研能力、人品、人缘、城府保留；<span class="hl">科研进展、导师心腹、同辈忮忌清零，手上的论文全部作废。</span>失败则白白消耗。</p><div class="actions"><button class="big" onclick="G.modal(\'daily\')">再想想</button><button class="big roll" onclick="G.transfer()">确定申请</button></div>',
+      );
+    return h;
+  }
+  function view() {
+    let h = view0();
+    if (S.screen !== "main" && S.modal === "album")
+      h += overlayC(albumHtml(), S.open && S.open.t ? "pin" : "");
+    return h;
+  }
+  function view0() {
+    if (S.screen === "welcome") {
+      const s = load();
+      const has = s && s.screen !== "welcome" && s.screen !== "end";
+      return (
+        '<div class="card welcome"><h1>读研<span class="hl">模拟器</span></h1><img class="hero" alt="开学啦" src="images/welcome_hero.png"><p>🎉恭喜你成为一名研究生。从研一 9 月到研三 6 月，一共 34 个月，能不能顺利毕业全看你怎么安排。</p><ul><li>每个月四周，每周安排一件事；月底开组会；每月可掷两次骰子，在地图上前进，走到哪格就遇到哪类事。</li><li>攒够「科研进展」记得兑换论文进度，论文有 CCF-A、B、C 三档。</li><li>毕业有两关：学校要求毕业论文盲审过 80 分，导师要求发表一篇论文，档次因人而异。</li></ul>' +
+        '<div class="wbtns">' +
+        (has
+          ? '<button class="primary" onclick="G.resume()">继续上次的进度</button><button class="ghost" onclick="G.start()">重新入学</button>'
+          : '<button class="primary" onclick="G.start()">报到入学</button>') +
+        '<button class="ghost" onclick="G.modal(\'album\')">图鉴：结局、成就、历史</button></div></div>'
+      );
+    }
+    if (S.screen === "drawStudent") {
+      const t = S.stu >= 0 ? STUDENTS[S.stu] : null;
+      let h =
+        '<div class="top strip"><b>一 · 抽签问出身</b><span class="muted">八种学生，全凭手气</span></div><div class="namebar"><input type="text" id="nm" maxlength="12" placeholder="给自己起个名字" aria-label="名字" value="' +
+        esc(S.name) +
+        '"><button class="mini" onclick="G.rename()">换一个</button></div>';
+      if (!t)
+        return (
+          h +
+          '<div class="card"><p>签筒摇一摇，看看你是哪种研究生。</p><button class="primary" onclick="G.drawStu()">抽签</button></div>'
+        );
+      return (
+        h +
+        '<div class="card"><div class="top"><h2>' +
+        t.tag +
+        '</h2><span class="tag mid">准备金 ¥ ' +
+        t.a.wealth * 20 +
+        '</span></div><p class="story">' +
+        t.desc +
+        '</p><div class="chips">' +
+        (t.note ? '<span class="chip ' + t.noteCls + '">' + t.note + "</span>" : "") +
+        t.hi.map((k) => '<span class="chip up">' + LBL[k] + "高</span>").join("") +
+        t.lo.map((k) => '<span class="chip down">' + LBL[k] + "低</span>").join("") +
+        "</div>" +
+        attrsHtml(
+          ["health", "mood", "res", "hair", "rel", "scheme", "luck", "ability", "wealth"],
+          t.a,
+          true,
+        ) +
+        "</div>" +
+        '<div class="actions"><button class="big" onclick="G.drawStu()">不满意，重抽</button><button class="big roll" onclick="G.okStu()">就是我了</button></div>'
+      );
+    }
+    if (S.screen === "drawMentor") {
+      const m = S.men >= 0 ? MENTORS[S.men] : null;
+      let h =
+        '<div class="top strip"><b>二 · 抽签拜师门</b><span class="muted">' +
+        esc(S.name) +
+        " · 准备金 ¥ " +
+        S.money +
+        "</span></div>";
+      if (!m)
+        return (
+          h +
+          '<div class="card"><p>四种导师，脾气、经费和毕业要求都不一样。抽到不满意的可以重抽。</p><button class="primary" onclick="G.drawMen()">抽签</button></div>'
+        );
+      return (
+        h +
+        '<div class="card"><h2>' +
+        m.name +
+        '</h2><p class="story">' +
+        m.desc +
+        '</p><div class="chips"><span class="chip">劳务费 ' +
+        m.stipend +
+        "/月</span>" +
+        m.tags.map((x) => '<span class="chip">' + x + "</span>").join("") +
+        "</div></div>" +
+        '<div class="actions"><button class="big" onclick="G.drawMen()">不满意，重抽</button><button class="big roll" onclick="G.okMen()">拜入门下</button></div>'
+      );
+    }
+    if (QS[S.screen] && S.qres)
+      return (
+        '<div class="top strip"><b>三 · 开学之前</b><span class="muted">现有 ¥ ' +
+        S.money +
+        '</span></div><div class="card"><h2>' +
+        S.qres.t +
+        '</h2><p class="story">' +
+        S.qres.x +
+        '</p><button class="primary" onclick="G.qnext()">继续</button></div>'
+      );
+    if (QS[S.screen]) {
+      const q = QS[S.screen];
+      const n = { q1: "第一问", q2: "第二问", q3: "第三问" }[S.screen];
+      return (
+        '<div class="top strip"><b>三 · 开学之前</b><span class="muted">' +
+        n +
+        " · 现有 ¥ " +
+        S.money +
+        '</span></div><div class="card"><h2>' +
+        q.t +
+        '</h2><div class="col">' +
+        q.o
+          .map((o, i) => {
+            const p = effParts(o.e);
+            return optBtn(
+              i,
+              "G.answer('" + S.screen + "'," + i + ")",
+              o.t,
+              "",
+              !canPay(o.e),
+              p.cost,
+            );
+          })
+          .join("") +
+        "</div></div>"
+      );
+    }
+    if (S.screen === "main") return mainHtml();
+    if (S.screen === "resume") {
+      const r = resumeData();
+      return (
+        '<div class="card"><p class="muted">三年结束 · ' +
+        (S.ext ? "延毕 " + S.ext + " 次后" : "按时") +
+        "通过盲审（" +
+        S.blind +
+        " 分）</p><h2>" +
+        esc(S.name) +
+        "的简历</h2>" +
+        (S.yearEnd
+          ? '<h3 class="sub">' +
+            (S.ext ? "最后这段时间" : "研三这一年") +
+            "的结算</h3>" +
+            S.yearEnd +
+            '<h3 class="sub">简历</h3>'
+          : "") +
+        (S.finalNote ? '<p class="result">' + S.finalNote + "</p>" : "") +
+        resumeHtml() +
+        '<p class="muted">导师心腹 ' +
+        S.a.trust +
+        " · 求职得分 " +
+        r.score +
+        "</p></div>" +
+        '<div class="card"><h2>毕业去向，选一个</h2><button onclick="G.path(\'job\')">找工作<small>求职得分满 3 分能找到工作；有 B 类以上论文接收可去大厂</small></button><button onclick="G.path(\'cn\')">国内申博<small>至少一篇 B 类以上论文接收；导师心腹决定学校档次</small></button><button onclick="G.path(\'ab\')">海外 PhD<small>至少一篇 A 类论文接收；导师心腹决定推荐信数量</small></button></div>'
+      );
+    }
+    if (S.screen === "end") {
+      return (
+        '<div class="card end"><p class="muted">结局 · ' +
+        dateStr(Math.min(S.month, END_M + 6 * S.ext)) +
+        '</p><h2><span class="hl">' +
+        S.ending.t +
+        "</span></h2>" +
+        endImg(S.ending.k) +
+        "<p>" +
+        S.ending.x +
+        "</p></div>" +
+        '<div class="card"><h3>' +
+        esc(S.name) +
+        '的简历</h3><p class="muted">师从' +
+        S.mentor.name +
+        "</p>" +
+        resumeHtml() +
+        (S.blind ? '<p class="muted">盲审 ' + S.blind + " 分</p>" : "") +
+        attrsHtml() +
+        "</div>" +
+        '<div class="card"><h3>本局成就 ' +
+        (S.runAch || []).length +
+        " 个" +
+        (S.newEnd ? " · 新结局" : "") +
+        '</h3><div class="chips">' +
+        ((S.runAch || [])
+          .map((id) => {
+            const a = ACH.find((x) => x.id === id);
+            return (
+              '<span class="chip ' +
+              ((S.newAch || []).indexOf(id) >= 0 ? "up" : "") +
+              '" title="' +
+              a.d +
+              '">' +
+              a.n +
+              ((S.newAch || []).indexOf(id) >= 0 ? " · 新" : "") +
+              "</span>"
+            );
+          })
+          .join("") || '<span class="muted">这一局没有解锁成就。</span>') +
+        '</div><button class="ghost" onclick="G.modal(\'album\')">查看图鉴</button></div><button class="primary" onclick="G.restart()">再读一次研</button>'
+      );
+    }
+    return "";
+  }
+  let lastKey = "";
+  function render() {
+    if (typeof document === "undefined") return;
+    const app = document.getElementById("app");
+    const oc = app.querySelector(".overlay .card");
+    const st = oc ? oc.scrollTop : 0;
+    const key =
+      S.screen +
+      "|" +
+      (S.modal || "") +
+      "|" +
+      (S.crisis || "") +
+      "|" +
+      S.notices.length +
+      "|" +
+      (S.ask ? S.ask.kind : "") +
+      "|" +
+      S.step;
+    app.innerHTML = view();
+    if (key === lastKey) {
+      const nc = app.querySelector(".overlay .card");
+      if (nc) nc.scrollTop = st;
+    }
+    lastKey = key;
+  }
+  G._ = {
+    get S() {
+      return S;
+    },
+    get M() {
+      return M;
+    },
+    ACH: ACH,
+    blindScore: blindScore,
+    NS: NS,
+    BOARD: BOARD,
+    resumeData: resumeData,
+    EVENTS: EVENTS,
+    DAILY: DAILY,
+    PAPER: PAPER,
+    canPay: canPay,
+    view: view,
+  };
+  (typeof window !== "undefined" ? window : globalThis).G = G;
+  render();
+})();
