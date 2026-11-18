@@ -2851,12 +2851,12 @@
     return h;
   }
   function dateStr(m) {
-    const y = m > END_M ? 4 : yearNo(m);
+    const y = m > END_M ? (S && !S.ext ? 3 : 4) : yearNo(m);
     return ["硕士一年级", "硕士二年级", "硕士三年级", "延毕"][y - 1] + " " + (((m + 7) % 12) + 1) + " 月";
   }
   // 位置紧的地方（记录、地图中间、历史记录）用简称
   function dateShort(m) {
-    const y = m > END_M ? 4 : yearNo(m);
+    const y = m > END_M ? (S && !S.ext ? 3 : 4) : yearNo(m);
     return ["研一", "研二", "研三", "延毕"][y - 1] + " " + (((m + 7) % 12) + 1) + " 月";
   }
   function log(t) {
@@ -2895,6 +2895,7 @@
           noRank: !!m.noRank,
           rq: Array.isArray(m.rq) ? m.rq.slice(-10) : [],
           rmq: !!m.rmq,
+          lastStu: typeof m.lastStu === "number" ? m.lastStu : -1,
         };
       }
     } catch (e) {}
@@ -3167,6 +3168,8 @@
       : { first: "一作", cofirst: "共同一作", second: "二作" }[p.role || "first"];
   }
   function recordRun(k) {
+    // 记下这一局的出身：下一局（二周目起）可以直接沿用，也能用三次抽签机会换掉
+    if (S.stu >= 0) M.lastStu = S.stu;
     const got = ACH.filter((a) => {
       try {
         return a.c(S, k);
@@ -3532,7 +3535,6 @@
     S.screen = "end";
     S.crisis = null;
     S.modal = null;
-    S.notices = [];
     S.ask = null;
     recordRun(k);
     rankSubmit(k);
@@ -3747,6 +3749,10 @@
         S.a.mood = clamp(S.a.mood - 10);
         t = "盲审结果出来了：" + sc + ' 分，没到 80 分。<br><span class="hl">延毕半年</span>，心情-10。';
       } else {
+        fixNote(
+          "blind",
+          "盲审结果出来了：" + sc + " 分，没到 80 分。已经延毕两次，学校不再给机会了。",
+        );
         end("fail");
         return;
       }
@@ -3766,6 +3772,12 @@
           "，你还没有满足。导师不肯在答辩申请上签字，正式答辩过不了。<br>" +
           '<span class="hl">延毕半年</span>，心情-10。盲审成绩保留，半年后只需要再过导师这一关。';
       } else {
+        fixNote(
+          "defense",
+          "导师的要求是至少发表一篇 CCF-" +
+            reqLv() +
+            "，延毕两次还是没有满足。导师没有在答辩申请上签字。",
+        );
         end("fail");
         return;
       }
@@ -3966,19 +3978,23 @@
     checks();
     return true;
   }
+  // 三年（或延毕）结束：先看完最后一个随机事件的结果，再看最后的审稿结果和「各奔东西」，
+  // 然后依次是素质评估报告（report）→ 简历（resume）→ 选毕业去向（path）
   function finalize() {
     const L = [];
     S.papers.forEach((p) => {
       if (p.status === "submitted") L.push(resolvePaper(p));
     });
-    seen("farewell");
-    L.unshift("<b>各奔东西</b>：" + EVENTS.find((e) => e.id === "farewell").d);
     S.finalNote = L.join("<br>");
+    if (L.length) notice("最后的审稿结果", L.join("<br>"));
+    fixNote("farewell", EVENTS.find((e) => e.id === "farewell").d);
     S.yearEnd = yearPage();
-    S.screen = "resume";
+    S.screen = "report";
+    S.step = "grad";
+    S.result = "各奔东西";
     S.modal = null;
     S.crisis = null;
-    S.notices = [];
+    S.ask = null;
   }
   function pickEvent(cat) {
     let c = EVENTS.filter(
@@ -4079,14 +4095,21 @@
     S.screen = "drawStudent";
     S.name = NAMES[rnd(NAMES.length)];
     S.sex = M.sex || (rnd(2) ? "b" : "g");
+    // 二周目起：出身默认沿用上一局，不用先抽签，还有三次重抽机会
+    if (M.lastStu >= 0 && STUDENTS[M.lastStu]) {
+      S.stu = M.lastStu;
+      S.keepStu = true;
+    }
   });
   /* 抽学生页：换头像（头像决定这一局主角是哪一版图，界面上不出现任何性别字眼） */
   G.sex = act(() => {
+    S.lotNew = false;
     S.sex = curSex() === "b" ? "g" : "b";
     M.sex = S.sex;
     saveMeta();
   });
   G.rename = act(() => {
+    S.lotNew = false;
     let n;
     do {
       n = NAMES[rnd(NAMES.length)];
@@ -4238,11 +4261,47 @@
     wipe();
     S = newState();
   });
-  G.drawStu = act(() => {
+  // 抽学生：第一次抽签免费，之后最多重抽 MAX_REROLL 次。
+  // 点下去先在八种类型之间滚动一秒左右再停下（系统设了「减少动态效果」或没有页面时直接出结果）
+  const MAX_REROLL = 3;
+  G.drawStu = function () {
+    if (S.screen !== "drawStudent" || S.lotAnim) return;
     const el = typeof document !== "undefined" && document.getElementById("nm");
     if (el) S.name = el.value;
-    S.stu = drawStudent(S.stu);
-  });
+    if (S.stu >= 0) {
+      if ((S.reroll || 0) >= MAX_REROLL) return;
+      S.reroll = (S.reroll || 0) + 1;
+    }
+    const fin = drawStudent(S.stu);
+    S.keepStu = false;
+    const done = () => {
+      S.lotAnim = false;
+      S.lotShow = -1;
+      S.stu = fin;
+      S.lotNew = true;
+      save();
+      render();
+    };
+    const still =
+      typeof document === "undefined" ||
+      (typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches);
+    if (still) return done();
+    S.lotAnim = true;
+    let n = 0,
+      last = -1;
+    const tick = () => {
+      n++;
+      if (n > 14) return done();
+      let i;
+      do i = rnd(STUDENTS.length);
+      while (i === last);
+      last = i;
+      S.lotShow = i;
+      render();
+      setTimeout(tick, 45 + n * 7);
+    };
+    tick();
+  };
   G.okStu = act(() => {
     const el = typeof document !== "undefined" && document.getElementById("nm");
     if (el) S.name = el.value;
@@ -4325,6 +4384,8 @@
     S.qres = null;
     S.screen = QS[S.screen].next;
     if (S.screen === "main") {
+      S.a0 = Object.assign({}, S.a);
+      S.money0 = S.money;
       S.month = 1;
       S.week = 1;
       S.step = "daily";
@@ -4561,6 +4622,11 @@
   });
   G.closeNotice = act(() => {
     S.notices.shift();
+  });
+  // 毕业结算的翻页：素质评估报告 → 简历 → 毕业去向
+  G.page = act((p) => {
+    if (S.notices.length || ["report", "resume", "path"].indexOf(S.screen) < 0) return;
+    if (["report", "resume", "path"].indexOf(p) >= 0) S.screen = p;
   });
   G.modal = act((m) => {
     S.modal = m;
@@ -5006,12 +5072,12 @@
   }
   function resumeHtml() {
     const r = resumeData();
-    const L = [];
+    const P = [];
     r.acc.forEach((p) =>
-      L.push("CCF-" + p.lv + "《" + esc(p.title || "未命名") + "》（" + roleName(p) + "，已接收）"),
+      P.push("CCF-" + p.lv + "《" + esc(p.title || "未命名") + "》（" + roleName(p) + "，已接收）"),
     );
     r.sub.forEach((p) =>
-      L.push(
+      P.push(
         "CCF-" +
           p.lv +
           "《" +
@@ -5023,13 +5089,177 @@
           "）",
       ),
     );
-    if (S.comps && S.comps.length) S.comps.forEach((c) => L.push("在「" + c + "」实习三个月"));
-    else if (S.interns) L.push("实习 " + S.interns + " 段");
-    if (S.hx) L.push("参与导师横向项目 " + S.hx + " 次");
-    if (S.applies) L.push("投出简历 " + S.applies + " 轮");
-    if (S.transfers) L.push("转组 " + S.transfers + " 次");
-    if (!L.length) L.push("一片空白");
-    return "<ul>" + L.map((x) => "<li>" + x + "</li>").join("") + "</ul>";
+    const I = [];
+    if (S.comps && S.comps.length) S.comps.forEach((c) => I.push("在「" + c + "」实习三个月"));
+    else if (S.interns) I.push("实习 " + S.interns + " 段");
+    const X = [];
+    if (S.hx) X.push("参与导师横向项目 " + S.hx + " 次");
+    if (S.applies) X.push("投出简历 " + S.applies + " 轮");
+    if (S.transfers) X.push("转组 " + S.transfers + " 次");
+    const sec = (t, L) =>
+      L.length ? '<h4 class="rsec">' + t + "</h4><ul>" + L.map((x) => "<li>" + x + "</li>").join("") + "</ul>" : "";
+    const h = sec("论文", P) + sec("实习", I) + sec("其他经历", X);
+    return h || '<p class="muted">一片空白。</p>';
+  }
+  /* ---------- 毕业结算第一页：素质评估报告 ---------- */
+  const REP_KEYS = ["health", "mood", "res", "hair", "rel", "scheme", "luck", "ability", "trust", "envy"];
+  const REP_CM = {
+    health: ["身体倍儿棒，三年没怎么生过病。", "身体被熬垮了，毕业后先去做个体检。"],
+    mood: ["每天都乐呵呵的，是组里的开心果。", "这三年过得不太开心，记得好好休息。"],
+    res: ["抗压能力一流，审稿意见也打不倒你。", "玻璃心，一点打击就要缓好几天。"],
+    hair: ["发量惊人，令同门羡慕。", "发际线已经明显后撤。"],
+    rel: ["人缘极好，走到哪都有朋友。", "独来独往，组里没几个说得上话的人。"],
+    scheme: ["深谙人情世故，办公室政治难不倒你。", "单纯直率，不太会来事。"],
+    luck: ["人品爆棚，好事总轮到你。", "运气欠佳，下次多做点好事。"],
+    ability: ["科研底子扎实，独立做课题没问题。", "科研底子还薄，离独当一面还有距离。"],
+    trust: ["导师的得意门生，推荐信稳了。", "导师对你印象一般，推荐信别抱太大希望。"],
+    envy: ["和同门相处融洽，没人在背后说你。", "同门看你的眼神有点复杂。"],
+  };
+  const REP_TITLE = {
+    ability: "科研型选手",
+    trust: "导师的得意门生",
+    rel: "组里的社交担当",
+    health: "养生达人",
+    mood: "快乐研究生",
+    res: "打不倒的研究生",
+    scheme: "八面玲珑",
+    luck: "欧皇本皇",
+    hair: "发量王者",
+  };
+  function repVal(k, v) {
+    return k === "envy" ? 100 - v : v;
+  }
+  // 评级档位：城府、科研能力开局就低（10–40、5–25），单独设档，免得人人都是 D
+  const REP_CUT = { scheme: [55, 40, 25, 15], ability: [70, 50, 35, 20] };
+  function grade(v, k) {
+    const c = REP_CUT[k] || [85, 70, 50, 30];
+    return v >= c[0] ? "S" : v >= c[1] ? "A" : v >= c[2] ? "B" : v >= c[3] ? "C" : "D";
+  }
+  // 换算到同一把尺子上（0–100），用来算综合评级和挑长处短板
+  function repNorm(k, v) {
+    const c = REP_CUT[k];
+    if (!c) return v;
+    const pts = [[c[3], 30], [c[2], 50], [c[1], 70], [c[0], 85], [100, 100]];
+    let lo = [0, 0];
+    for (const p of pts) {
+      if (v <= p[0]) return lo[1] + ((v - lo[0]) / (p[0] - lo[0] || 1)) * (p[1] - lo[1]);
+      lo = p;
+    }
+    return 100;
+  }
+  function reportHtml() {
+    const a0 = S.a0 || (STUDENTS[S.stu] ? STUDENTS[S.stu].a : S.a);
+    const vals = REP_KEYS.map((k) => [k, repNorm(k, repVal(k, S.a[k]))]);
+    const avg = vals.reduce((t, x) => t + x[1], 0) / vals.length;
+    const best = vals.filter((x) => REP_TITLE[x[0]]).sort((x, y) => y[1] - x[1])[0];
+    const title = avg < 35 ? "伤痕累累的毕业生" : REP_TITLE[best[0]];
+    const g = grade(avg, "");
+    const good = vals.filter((x) => x[1] >= 70).sort((x, y) => y[1] - x[1]).slice(0, 3);
+    const bad = vals.filter((x) => x[1] < 30).sort((x, y) => x[1] - y[1]).slice(0, 3);
+    const row = (k) => {
+      const x = Math.floor(a0[k] || 0),
+        y = Math.floor(S.a[k]);
+      return (
+        "<span>" +
+        LBL[k] +
+        "</span><b>" +
+        x +
+        " → " +
+        y +
+        '</b><em class="gr g-' +
+        grade(repVal(k, S.a[k]), k) +
+        '">' +
+        grade(repVal(k, S.a[k]), k) +
+        "</em>"
+      );
+    };
+    const top = DAILY.map((d) => [d.n, S.tot[d.k] || 0])
+      .filter((x) => x[1] > 0)
+      .sort((x, y) => y[1] - x[1])
+      .slice(0, 3);
+    const evN = Object.keys(S.evCount || {}).reduce((t, k) => t + S.evCount[k], 0);
+    const months = END_M + 6 * S.ext;
+    const stats = [
+      "读研 " + months + " 个月" + (S.ext ? "（延毕 " + S.ext + " 次）" : ""),
+      "遇到随机事件 " + evN + " 次",
+      "组会前熬夜 " + (S.nights || 0) + " 次",
+      (S.money < 0 ? "欠债 " + -S.money : "存款 " + S.money) + " 元",
+    ];
+    if (S.transfers) stats.push("转组 " + S.transfers + " 次");
+    const li = (L, i) => L.map((x) => "<li><b>" + LBL[x[0]] + "</b>：" + REP_CM[x[0]][i] + "</li>").join("");
+    return (
+      '<div class="top strip"><b>毕业结算 · 1 / 2</b><span class="muted">' +
+      esc(S.name) +
+      " · 师从" +
+      S.mentor.name +
+      "</span></div>" +
+      '<div class="card report"><h2>素质评估报告</h2><div class="grade-box"><span class="grade g-' +
+      g +
+      '">' +
+      g +
+      '</span><div><p class="muted">综合评级</p><p class="rtitle">' +
+      title +
+      "</p></div></div>" +
+      '<h3 class="sub">三年变化（入学 → 毕业 · 评级）</h3><div class="ygrid">' +
+      REP_KEYS.map(row).join("") +
+      "</div>" +
+      (good.length ? '<h3 class="sub">长处</h3><ul class="rlist">' + li(good, 0) + "</ul>" : "") +
+      (bad.length ? '<h3 class="sub">短板</h3><ul class="rlist">' + li(bad, 1) + "</ul>" : "") +
+      '<h3 class="sub">这几年</h3><div class="chips">' +
+      stats.map((x) => '<span class="chip">' + x + "</span>").join("") +
+      "</div>" +
+      (top.length
+        ? '<p class="muted">做得最多的事：' + top.map((x) => x[0] + " " + x[1] + " 次").join("，") + "。</p>"
+        : "") +
+      (S.yearEnd
+        ? "<details><summary>" +
+          (S.ext ? "最后这段时间" : "硕士三年级这一年") +
+          "的结算</summary>" +
+          S.yearEnd +
+          "</details>"
+        : "") +
+      '</div><button class="primary" onclick="G.page(\'resume\')">下一页：简历</button>'
+    );
+  }
+  /* ---------- 毕业结算第二页：简历 ---------- */
+  function resumePageHtml() {
+    const r = resumeData();
+    return (
+      '<div class="top strip"><b>毕业结算 · 2 / 2</b><span class="muted">' +
+      esc(S.name) +
+      "</span></div>" +
+      '<div class="card resume"><h2>' +
+      esc(S.name) +
+      '的简历</h2><p class="rhead">硕士研究生 · ' +
+      (S.ext ? "延毕 " + S.ext + " 次后毕业" : "按时毕业") +
+      "<br>师从" +
+      S.mentor.name +
+      "<br>毕业论文盲审 " +
+      S.blind +
+      " 分</p>" +
+      resumeHtml() +
+      '<p class="muted">求职得分 ' +
+      Math.round(r.score * 10) / 10 +
+      " · 导师心腹 " +
+      Math.floor(S.a.trust) +
+      "</p></div>" +
+      '<div class="actions"><button class="big" onclick="G.page(\'report\')">上一页</button><button class="big roll" onclick="G.page(\'path\')">下一步：去向</button></div>'
+    );
+  }
+  /* ---------- 选毕业去向 ---------- */
+  function pathHtml() {
+    return (
+      (S.phd
+        ? '<div class="card"><h2>毕业去向</h2><p class="story">' +
+          (S.phd === "mid" ? "硕士二年级中期之后" : "为了那份实习") +
+          '，你答应过导师留下来读博。</p><button onclick="G.path(\'stay\')">留组读博<small>留在组里，继续读博士</small></button></div>'
+        : '<div class="card"><h2>毕业了，下一步去哪？</h2><p class="muted">选好就进入结局，选完不能改。</p><button onclick="G.path(\'job\')">找工作<small>求职得分满 3 分能找到工作；有 B 类以上论文接收可去大厂</small></button><button onclick="G.path(\'cn\')">国内申博<small>至少一篇 B 类以上论文接收；导师心腹决定学校档次</small></button><button onclick="G.path(\'ab\')">海外 PhD<small>至少一篇 A 类论文接收；导师心腹决定推荐信数量</small></button><button onclick="G.path(\'stay\')"' +
+          (S.a.trust >= 50 ? "" : " disabled") +
+          ">留组读博<small>" +
+          (S.a.trust >= 50 ? "导师心腹 50 以上，导师愿意留你" : "导师心腹 50 以上才行") +
+          "</small></button></div>") +
+      '<button class="ghost" onclick="G.page(\'resume\')">回去看看简历</button>'
+    );
   }
   function paperHtml() {
     const active = S.papers.filter((p) => p.status !== "accepted" && !p.collab).length;
@@ -5532,50 +5762,103 @@
     if (S.screen !== "main" && S.modal === "rank") h += overlayC(rankHtml(), "pin");
     return h;
   }
+  // 欢迎页「继续上次的进度」下面那行：名字 · 导师 · 读到哪个月
+  function saveLabel(s) {
+    const L = [esc(s.name || "无名")];
+    if (s.mentor) L.push(s.mentor.name);
+    if (s.screen === "main") {
+      const y =
+        s.month > END_M
+          ? s.ext
+            ? "延毕"
+            : "硕士三年级"
+          : ["硕士一年级", "硕士二年级", "硕士三年级"][yearNo(s.month) - 1];
+      L.push(y + " " + (((s.month + 7) % 12) + 1) + " 月");
+    } else if (["report", "resume", "path"].indexOf(s.screen) >= 0) L.push("毕业结算中");
+    else L.push("入学报到中");
+    return L.join(" · ");
+  }
   function view0() {
     if (S.screen === "welcome") {
       const s = load();
       const has = s && s.screen !== "welcome" && s.screen !== "end";
       return (
-        '<div class="card welcome"><h1>读研<span class="hl">模拟器</span></h1><img class="hero" alt="开学啦" src="images/welcome_hero.png"><p>🎉恭喜你成为一名硕士研究生。从硕士一年级 9 月到硕士三年级 6 月，一共 34 个月，7 月各奔东西。能不能顺利毕业全看你怎么安排。</p><ul><li>每个月四周，每周安排一件事；月底开组会；每月可掷两次骰子，在地图上前进，走到哪格就遇到哪类事。</li><li>攒够「科研进展」记得兑换论文进度，论文有 CCF-A、B、C 三档。</li><li>毕业有两关：学校要求毕业论文盲审 80 分及以上，导师要求发表一篇论文，档次因人而异。</li></ul>' +
+        '<div class="card welcome"><h1>读研<span class="hl">模拟器</span></h1><p class="wsub">🎉 恭喜你成为一名硕士研究生。34 个月，能不能顺利毕业全看你怎么安排。</p><img class="hero" alt="开学啦" src="images/welcome_hero.png">' +
         '<div class="wbtns">' +
         (has
-          ? '<button class="primary" onclick="G.resume()">继续上次的进度</button><button class="ghost" onclick="G.start()">重新入学</button>'
+          ? '<button class="primary" onclick="G.resume()">继续上次的进度<small>' +
+            saveLabel(s) +
+            '</small></button><button class="ghost" onclick="G.start()">重新入学</button>'
           : '<button class="primary" onclick="G.start()">报到入学</button>') +
-        '<button class="ghost" onclick="G.rank()">排行榜：盲审最高分和最低分</button><button class="ghost" onclick="G.modal(\'album\')">图鉴：结局、成就、历史</button><button class="ghost" onclick="G.modal(\'settings\')">存档：导入、导出</button></div></div>'
+        "</div>" +
+        '<div class="wtiles"><div><b>🎲</b><span>每月掷骰</span><small>四周日常，月底组会，再掷两次骰子遇事件</small></div><div><b>📄</b><span>攒进展发论文</span><small>科研进展换论文进度，CCF-A、B、C 三档</small></div><div><b>🎓</b><span>两关才能毕业</span><small>毕业论文盲审 80 分，加上导师的论文要求</small></div></div>' +
+        '<div class="wmini"><button class="mini" onclick="G.rank()">📊 排行榜</button><button class="mini" onclick="G.modal(\'album\')">🏆 图鉴</button><button class="mini" onclick="G.modal(\'settings\')">⚙️ 设置</button></div></div>'
       );
     }
     if (S.screen === "drawStudent") {
-      const t = S.stu >= 0 ? STUDENTS[S.stu] : null;
+      const t = S.stu >= 0 && !S.lotAnim ? STUDENTS[S.stu] : null;
       let h =
         '<div class="top strip"><b>一 · 抽签问出身</b><span class="muted">八种学生，全凭手气</span></div><div class="namebar"><button class="mini avatar" onclick="G.sex()" aria-label="换头像" title="换头像">' + avatar("ava-lg") + '<i class="swap" aria-hidden="true">⇄</i></button><input type="text" id="nm" maxlength="12" placeholder="给自己起个名字" aria-label="名字" value="' +
         esc(S.name) +
         '"><button class="mini" onclick="G.rename()">换一个</button></div>';
+      if (S.lotAnim)
+        return (
+          h +
+          '<div class="card lot rolling"><div class="top"><span class="qian">摇签中</span></div><h2 class="lotname">' +
+          (S.lotShow >= 0 ? STUDENTS[S.lotShow].tag : "……") +
+          '</h2><p class="muted">签筒哗啦哗啦地响……</p></div>' +
+          '<div class="actions"><button class="big" disabled>不满意，重抽</button><button class="big roll" disabled>就是我了</button></div>'
+        );
       if (!t)
         return (
           h +
-          '<div class="card"><p>签筒摇一摇，看看你是哪种硕士研究生。</p><button class="primary" onclick="G.drawStu()">抽签</button></div>'
+          '<div class="card lot"><p>🎋 签筒摇一摇，看看你是哪种硕士研究生。</p><p class="muted">抽完不满意可以重抽 ' +
+          MAX_REROLL +
+          ' 次。</p><button class="primary" onclick="G.drawStu()">抽签</button></div>'
         );
+      const rare = t.tag === "天选之子" ? "gold" : t.tag === "天崩开局" ? "grey" : "";
+      const qian = rare === "gold" ? "上上签" : rare === "grey" ? "下下签" : "中签";
+      const left = MAX_REROLL - (S.reroll || 0);
+      const chip = (k, up) =>
+        '<span class="chip ' + (up ? "up" : "down") + '">' + LBL[k] + " " + t.a[k] + (up ? " · 高" : " · 低") + "</span>";
       return (
         h +
-        '<div class="card"><div class="top"><h2>' +
-        t.tag +
-        '</h2><span class="tag mid">准备金 ¥ ' +
+        '<div class="card lot' +
+        (rare ? " lot-" + rare : "") +
+        (S.lotNew ? " pop" : "") +
+        '"><div class="top"><span class="qian">' +
+        qian +
+        '</span><span class="tag mid">准备金 ¥ ' +
         t.a.wealth * 20 +
-        '</span></div><p class="story">' +
+        "</span></div>" +
+        (S.keepStu ? '<p class="muted keep">二周目 · 沿用上一局的出身，不满意可以重抽</p>' : "") +
+        '<h2 class="lotname">' +
+        t.tag +
+        "</h2>" +
+        (rare === "gold"
+          ? '<p class="lotcry">✨ 万里挑一！</p>'
+          : rare === "grey"
+            ? '<p class="lotcry">😵 这开局……</p>'
+            : "") +
+        '<p class="story">' +
         t.desc +
         '</p><div class="chips">' +
         (t.note ? '<span class="chip ' + t.noteCls + '">' + t.note + "</span>" : "") +
-        t.hi.map((k) => '<span class="chip up">' + LBL[k] + "高</span>").join("") +
-        t.lo.map((k) => '<span class="chip down">' + LBL[k] + "低</span>").join("") +
-        "</div>" +
+        t.hi.map((k) => chip(k, true)).join("") +
+        t.lo.map((k) => chip(k, false)).join("") +
+        '</div><details class="allattr"><summary>查看全部属性</summary>' +
         attrsHtml(
           ["health", "mood", "res", "hair", "rel", "scheme", "luck", "ability", "wealth"],
           t.a,
           true,
         ) +
-        "</div>" +
-        '<div class="actions"><button class="big" onclick="G.drawStu()">不满意，重抽</button><button class="big roll" onclick="G.okStu()">就是我了</button></div>'
+        "</details></div>" +
+        '<div class="actions"><button class="big" onclick="G.drawStu()"' +
+        (left > 0 ? "" : " disabled") +
+        '>不满意，重抽</button><button class="big roll" onclick="G.okStu()">就是我了</button></div>' +
+        '<p class="muted left">' +
+        (left > 0 ? "还能重抽 " + left + " 次" : "签抽完了，就是它了") +
+        "</p>"
       );
     }
     if (S.screen === "drawMentor") {
@@ -5643,41 +5926,12 @@
       );
     }
     if (S.screen === "main") return mainHtml();
-    if (S.screen === "resume") {
-      const r = resumeData();
-      return (
-        '<div class="card"><p class="muted">三年结束 · ' +
-        (S.ext ? "延毕 " + S.ext + " 次后" : "按时") +
-        "通过毕业论文盲审（" +
-        S.blind +
-        " 分）</p><h2>" +
-        esc(S.name) +
-        "的简历</h2>" +
-        (S.yearEnd
-          ? '<h3 class="sub">' +
-            (S.ext ? "最后这段时间" : "硕士三年级这一年") +
-            "的结算</h3>" +
-            S.yearEnd +
-            '<h3 class="sub">简历</h3>'
-          : "") +
-        (S.finalNote ? '<p class="result">' + S.finalNote + "</p>" : "") +
-        resumeHtml() +
-        '<p class="muted">导师心腹 ' +
-        S.a.trust +
-        " · 求职得分 " +
-        r.score +
-        "</p></div>" +
-        (S.phd
-          ? '<div class="card"><h2>毕业去向</h2><p class="story">' +
-            (S.phd === "mid" ? "硕士二年级中期之后" : "为了那份实习") +
-            '，你答应过导师留下来读博。</p><button onclick="G.path(\'stay\')">留组读博<small>留在组里，继续读博士</small></button></div>'
-          : '<div class="card"><h2>毕业去向，选一个</h2><button onclick="G.path(\'job\')">找工作<small>求职得分满 3 分能找到工作；有 B 类以上论文接收可去大厂</small></button><button onclick="G.path(\'cn\')">国内申博<small>至少一篇 B 类以上论文接收；导师心腹决定学校档次</small></button><button onclick="G.path(\'ab\')">海外 PhD<small>至少一篇 A 类论文接收；导师心腹决定推荐信数量</small></button><button onclick="G.path(\'stay\')"' +
-            (S.a.trust >= 50 ? "" : " disabled") +
-            ">留组读博<small>" +
-            (S.a.trust >= 50 ? "导师心腹 50 以上，导师愿意留你" : "导师心腹 50 以上才行") +
-            "</small></button></div>")
-      );
-    }
+    // 结局或毕业结算之前还有弹窗没看（最后一个事件的结果、各奔东西等）：先在主页面上看完
+    if (S.notices.length && S.mentor && ["report", "resume", "path", "end"].indexOf(S.screen) >= 0)
+      return mainHtml();
+    if (S.screen === "report") return reportHtml();
+    if (S.screen === "resume") return resumePageHtml();
+    if (S.screen === "path") return pathHtml();
     if (S.screen === "end") {
       return (
         '<div class="card end"><p class="muted">结局 · ' +

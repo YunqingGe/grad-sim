@@ -1296,3 +1296,224 @@ button.chip.on {
 .rk-me {
   margin-top: 4px;
 }
+/* 毕业结算：素质评估报告、简历 */
+.grade-box {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 6px 0 10px;
+}
+.grade {
+  font-family: "Arial Black", "Helvetica Neue", Arial, sans-serif;
+  font-weight: 900;
+  font-size: 44px;
+  line-height: 1;
+  width: 72px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  background: var(--hl);
+}
+.grade.g-C,
+.grade.g-D {
+  background: #f8dcd9;
+}
+.grade-box p {
+  margin: 0;
+}
+.rtitle {
+  font-family: var(--display);
+  font-size: 22px;
+}
+.rlist {
+  margin: 4px 0;
+  padding-left: 18px;
+  font-size: 14px;
+}
+.report details {
+  margin-top: 8px;
+  font-size: 14px;
+}
+.report summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.rhead {
+  font-size: 14px;
+  color: var(--muted);
+  border-bottom: 1.5px dashed var(--line);
+  padding-bottom: 8px;
+}
+.rsec {
+  font-family: var(--display);
+  font-size: 16px;
+  margin: 10px 0 2px;
+}
+.resume ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 14px;
+}
+.ygrid em.gr {
+  font-family: "Arial Black", "Helvetica Neue", Arial, sans-serif;
+  font-weight: 900;
+}
+.ygrid em.g-S,
+.ygrid em.g-A {
+  color: #1a7f4b;
+}
+.ygrid em.g-C,
+.ygrid em.g-D {
+  color: var(--red);
+}
+/* 欢迎页：插图下面紧跟主按钮，三格玩法说明，底部一行小按钮 */
+.welcome .wsub {
+  margin: 2px 0 6px;
+  font-size: 15px;
+}
+.welcome .wbtns {
+  margin-top: 10px;
+  padding-top: 0;
+}
+.wtiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-gap: 8px;
+  gap: 8px;
+  margin-top: 14px;
+}
+.wtiles > div {
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 6px;
+  background: #f6f9f7;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.wtiles b {
+  font-size: 24px;
+  line-height: 1.3;
+}
+.wtiles span {
+  font-family: var(--display);
+  font-size: 15px;
+}
+.wtiles small {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.wmini {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-gap: 8px;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 14px;
+}
+.wmini button {
+  text-align: center;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 4px;
+  font-size: 14px;
+}
+/* 抽学生：签 / 卡牌 */
+.lot .qian {
+  font-family: var(--display);
+  font-size: 15px;
+  padding: 2px 12px;
+  border: 1.5px solid var(--ink);
+  border-radius: 99px;
+  background: #fff;
+}
+.lotname {
+  font-size: 30px;
+  margin: 6px 0 2px;
+}
+.lotcry {
+  font-family: var(--display);
+  font-size: 17px;
+  margin: 0;
+}
+.lot-gold {
+  border: 3px solid #d4a017;
+  background: linear-gradient(#fff7dc, #fff 55%);
+}
+.lot-gold .qian {
+  background: var(--hl);
+  border-color: #b8860b;
+}
+.lot-gold .lotcry {
+  color: #a87400;
+}
+.lot-grey {
+  border: 3px solid #9aa3a9;
+  background: #eef0f1;
+}
+.lot-grey .qian {
+  background: #d9dde0;
+}
+.lot-grey .lotcry {
+  color: var(--muted);
+}
+.allattr summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 14px;
+  margin-top: 8px;
+}
+.pop {
+  animation: lotpop 0.45s ease-out;
+}
+
+.rolling {
+  animation: lotshake 0.12s infinite alternate;
+}
+.rolling .lotname {
+  opacity: 0.8;
+}
+@keyframes lotpop {
+  0% {
+    transform: scale(0.85) rotate(-2deg);
+    opacity: 0.3;
+  }
+  60% {
+    transform: scale(1.04) rotate(1deg);
+    opacity: 1;
+  }
+  100% {
+    transform: none;
+  }
+}
+@keyframes lotshake {
+  from {
+    transform: rotate(-1.2deg);
+  }
+  to {
+    transform: rotate(1.2deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pop,
+  .rolling {
+    animation: none;
+  }
+}
+/* 抽签页按钮下面的「还能重抽几次」 */
+p.left {
+  text-align: center;
+  font-size: 13px;
+  margin: 0;
+}
+/* 二周目沿用出身的提示 */
+.lot .keep {
+  font-size: 13px;
+  margin: 6px 0 0;
+}
