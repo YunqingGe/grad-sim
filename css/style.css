@@ -431,6 +431,7 @@ button.go:hover:not(:disabled) {
 .pawn {
   position: absolute;
   inset: 0;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1041,4 +1042,166 @@ button.chip.on {
 }
 .tag {
   white-space: nowrap;
+}
+
+/* ================================================================
+ * 事件类型主题色：随机事件和地图格子一致，固定事件用紫色
+ * ================================================================ */
+:root {
+  --c-mentor: #f8dcd9;
+  --b-mentor: #cf4038;
+  --k-mentor: #8a231d;
+  --c-peer: #dbe6fb;
+  --b-peer: #2c68c9;
+  --k-peer: #1d4688;
+  --c-research: #d6efe4;
+  --b-research: #2a8a66;
+  --k-research: #17573f;
+  --c-life: #fff1b8;
+  --b-life: #b8900a;
+  --k-life: #6b5200;
+  --c-fixed: #ebe1fb;
+  --b-fixed: #7a4fc4;
+  --k-fixed: #4b2c85;
+}
+.t-mentor {
+  background: var(--c-mentor);
+}
+.t-peer {
+  background: var(--c-peer);
+}
+.t-research {
+  background: var(--c-research);
+}
+.t-life {
+  background: var(--c-life);
+}
+.tags {
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.tag.cat-mentor,
+.chip.cat-mentor {
+  background: var(--c-mentor);
+  border-color: var(--b-mentor);
+  color: var(--k-mentor);
+}
+.tag.cat-peer,
+.chip.cat-peer {
+  background: var(--c-peer);
+  border-color: var(--b-peer);
+  color: var(--k-peer);
+}
+.tag.cat-research,
+.chip.cat-research {
+  background: var(--c-research);
+  border-color: var(--b-research);
+  color: var(--k-research);
+}
+.tag.cat-life,
+.chip.cat-life {
+  background: var(--c-life);
+  border-color: var(--b-life);
+  color: var(--k-life);
+}
+.tag.cat-fixed,
+.chip.cat-fixed {
+  background: var(--c-fixed);
+  border-color: var(--b-fixed);
+  color: var(--k-fixed);
+}
+.evgrp {
+  margin-bottom: 10px;
+}
+.evhead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+.story.st-mentor {
+  border-left-color: var(--b-mentor);
+}
+.story.st-peer {
+  border-left-color: var(--b-peer);
+}
+.story.st-research {
+  border-left-color: var(--b-research);
+}
+.story.st-life {
+  border-left-color: var(--b-life);
+}
+.story.st-fixed {
+  border-left-color: var(--b-fixed);
+}
+/* 设置页的分组 */
+.setbox {
+  margin-top: 4px;
+}
+.setbox > button {
+  width: 100%;
+}
+.setbox .sub {
+  margin: 0 0 4px;
+}
+.setbox .actions {
+  margin-top: 8px;
+}
+/* 主角头像：白色纸边加一点投影，看起来像贴纸 */
+.ava {
+  display: inline-block;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: #fffdf7;
+  padding: 2px;
+  box-shadow:
+    0 0 0 1px rgba(31, 42, 55, 0.18),
+    0 2px 3px rgba(31, 42, 55, 0.28);
+  object-fit: contain;
+  vertical-align: middle;
+}
+.ava-lg {
+  width: 52px;
+  height: 52px;
+  padding: 3px;
+}
+.ava-sm {
+  width: 30px;
+  height: 30px;
+}
+.ava-pawn {
+  position: relative;
+  z-index: 2;
+  width: 118%;
+  height: 118%;
+  max-width: 40px;
+  max-height: 40px;
+}
+/* 抽学生页的换头像按钮 */
+.namebar .avatar {
+  position: relative;
+  padding: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  line-height: 0;
+  flex: none;
+}
+.namebar .avatar:active .ava {
+  transform: translateY(1px);
+}
+.namebar .avatar .swap {
+  position: absolute;
+  right: -4px;
+  bottom: -2px;
+  font-style: normal;
+  font-size: 11px;
+  line-height: 16px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: #fff;
+  text-align: center;
 }
