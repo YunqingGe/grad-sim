@@ -204,7 +204,7 @@
     {
       id: "big",
       req: "A",
-      name: "头发花白的大牛导师",
+      name: "头发灰白的大牛导师",
       desc: "学院里人人都听过这个名字。办公室的门常年关着，据说一年有大半时间在天上飞。",
       stipend: 500,
       mp: null,
@@ -713,7 +713,7 @@
       id: "zotero",
       c: "peer",
       tone: "good",
-      n: "同门跟你分享了一个好用的文献整理工具",
+      n: "同门分享了一个好用的文献工具",
       d: "几百篇 PDF 终于有地方安置了。",
       o: [{ t: "连夜整理", e: { progress: 2, res: 1, rel: 1 } }],
     },
@@ -825,7 +825,7 @@
           t: "汇报",
           e: {},
           fn: (s) =>
-            s.mprog > 0
+            s.mprog > 3
               ? "你把这个月做的东西讲了一遍，导师点了点头。" + applyEff({ trust: 1 }, true)
               : "你支支吾吾讲不出东西。" + applyEff({ mood: -4, trust: -3 }, true),
         },
@@ -863,7 +863,7 @@
       m: ["nasty"],
       tone: "good",
       n: "导师突然发红包",
-      d: "“上次那个项目结了，拿去花。”",
+      d: "“上次那个项目结了，表现不错，拿去花。”",
       o: [{ t: "谢谢老师", e: { money: 300 } }],
     },
     {
@@ -890,7 +890,7 @@
       m: ["nasty"],
       tone: "bad",
       n: "组会上被导师严厉批评",
-      d: "“这个结果还不太能拿得出手。”会议室里安静了好几秒。",
+      d: "“这个结果你好意思拿出来讲？不要浪费大家的时间了。”会议室里安静了好几秒。",
       o: [
         { t: "低头听着", e: { mood: -5 }, r: "你盯着桌面上的一道划痕看了十分钟。" },
         { t: "当场解释", e: { trust: -5, res: 2 }, r: "导师皱了皱眉，没再说话。" },
@@ -906,7 +906,7 @@
       m: ["young"],
       tone: "bad",
       n: "导师拉你周末赶 deadline",
-      d: "“就差最后一组实验了，这周末辛苦一下。”",
+      d: "“论文不要再拖到下个月，这周末辛苦一下。”",
       o: [{ t: "通宵", e: { progress: 6, health: -3, mood: -2 } }],
     },
     {
@@ -1024,8 +1024,8 @@
       c: "mentor",
       m: ["big"],
       tone: "mid",
-      n: "导师让大师兄/大师姐代管",
-      d: "“以后具体的事，你们找大师兄/大师姐。”",
+      n: "导师让大师兄/大师姐带你",
+      d: "“以后具体的事，找你大师兄/大师姐。”",
       o: [
         { t: "抱紧师兄/师姐大腿", e: { rel: 2, progress: 3 }, r: "师兄/师姐把自己踩过的坑都告诉了你。" },
         { t: "自己摸索", e: { ability: 1 }, r: "慢是慢了点，但都是自己的。" },
@@ -1057,16 +1057,16 @@
       id: "badtopic",
       c: "research",
       tone: "bad",
-      n: "做着做着发现这个题目不好",
+      n: "做着做着发现这个题目不对劲",
       d: "方法推到一半，你发现最初的假设根本不成立。",
       cond: (s) => !!workPaper(s, 2, 3),
       w: () => 1.5,
       o: [
-        { t: "调整思路继续做", e: { progress: -5 }, r: "之前的推导有一半用不上了。" },
+        { t: "改换思路继续做", e: { progress: -5 }, r: "之前的推导有一半用不上了。" },
         {
           t: "硬着头皮往下推",
           e: { mood: -4 },
-          r: "你假装没看见那个漏洞。",
+          r: "假装没看见那个漏洞",
           fn: (s) => (Math.random() < 0.5 ? regress(s, 2, 3) : "居然推通了"),
         },
       ],
@@ -1076,7 +1076,7 @@
       c: "research",
       tone: "bad",
       n: "发现实验有个参数设错了",
-      d: "学习率多写了一个零，之前三周的实验全是在这个设置下跑的。",
+      d: "多写了一个零，之前三周的实验全是在这个设置下跑的。",
       cond: (s) => !!workPaper(s, 3, 3),
       w: () => 1.5,
       o: [
@@ -1131,7 +1131,7 @@
       m: ["nasty", "big"],
       tone: "bad",
       n: "导师派你去做横向",
-      d: "“甲方下周要验收，你先把手上的事放一放。”",
+      d: "“甲方下月要验收，你先把手上的事放一放。”",
       cond: (s) => !s.hxLeft,
       o: [
         {
@@ -1150,7 +1150,7 @@
       m: ["big", "nasty"],
       tone: "mid",
       n: "导师让你帮忙做 PPT",
-      d: "“明天有个汇报，你帮我把这二十页美化一下。”",
+      d: "“下周有个汇报，你帮我把这二十页美化一下。”",
       o: [
         {
           t: "认真做，连动画都调了",
@@ -1197,7 +1197,7 @@
       c: "mentor",
       m: ["young", "nasty"],
       tone: "bad",
-      n: "导师建议你临时改方向",
+      n: "导师临时建议你改方向",
       d: "“我昨晚想了想，你这个方向没前途，换一个吧。”",
       o: [
         { t: "听导师的", e: { progress: -8, trust: 3 }, r: "之前的积累用不上了。" },
@@ -1245,7 +1245,7 @@
       c: "research",
       tone: "good",
       n: "审稿意见很友善",
-      d: "三个审稿人，没有一个是 Reviewer 2。",
+      d: "三个审稿人，没有一个是「Reviewer 2」。",
       cond: (s) => s.papers.some((p) => p.status === "submitted"),
       o: [
         {
@@ -1335,7 +1335,7 @@
           },
         },
         { t: "假装没看见", e: {}, r: "你绕了过去。" },
-        { t: "拿去食堂刷了几顿饭", e: { money: 100, luck: -5 }, r: "饭是香的，心里有点虚。" },
+        { t: "拿去食堂刷了几顿饭", e: { money: 250, luck: -5 }, r: "饭是香的，心里有点虚。" },
       ],
     },
     {
@@ -1348,9 +1348,9 @@
         { t: "顺路送一程", e: { luck: 2, rel: 1 }, r: "对方连说了三声谢谢。" },
         { t: "自己先走了", e: {}, r: "雨下得更大了。" },
         {
-          t: "顺手拿走门口一把没人看着的伞",
-          e: { luck: -4, mood: 1 },
-          r: "你没淋到雨，有人淋到了。",
+          t: "趁没人注意顺走门口一把伞给对方",
+          e: { luck: -4, mood: 1, scheme: 3},
+          r: "你倒是挺会做人的。",
         },
       ],
     },
@@ -1365,7 +1365,7 @@
       o: [
         {
           t: "同意",
-          e: { trust: 8, mood: -5 },
+          e: { trust: 10, mood: -5 },
           r: "导师拍了拍你的肩膀。",
           fn: (s) => {
             const p = s.papers
@@ -1391,31 +1391,31 @@
       c: "peer",
       tone: "good",
       n: "同门请客吃饭",
-      d: "师兄/师姐发了论文，请全组吃烧烤。",
-      o: [{ t: "去吃", e: { mood: 2, rel: 2 } }],
+      d: "师兄/师姐发了顶会论文，请全组吃烧烤。",
+      o: [{ t: "必须得去啊", e: { mood: 2, rel: 2 } }],
     },
     {
       id: "gossip",
       c: "peer",
       tone: "mid",
       n: "同门约你一起吐槽导师",
-      d: "奶茶店角落里，三个人压低了声音。",
+      d: "餐厅角落里，三个人压低了声音。",
       o: [
         {
           t: "一起吐槽个痛快",
           e: { mood: 4, rel: 2 },
-          r: "吐槽完神清气爽。",
+          r: "心里话说完神清气爽。",
           fn: (s) => {
             if (Math.random() < 0.2) {
               s.a.trust = clamp(s.a.trust - 5);
-              return "不巧被导师听见了，导师心腹-5";
+              return "不知道怎么传到导师耳朵里，导师心腹-5";
             }
             if (Math.random() < 0.5) s.gossipLeak = 1;
             return "";
           },
         },
         { t: "默默听着", e: { rel: 1 }, r: "你负责点头和续杯。" },
-        { t: "替导师说两句好话", e: { rel: -2, scheme: 1 }, r: "气氛突然有点尴尬。" },
+        { t: "替导师找补两句好话", e: { rel: -2, scheme: 1 }, r: "气氛突然有点尴尬。" },
       ],
     },
     {
@@ -1432,8 +1432,8 @@
       c: "mentor",
       tone: "good",
       n: "导师出差两周",
-      d: "办公室的空气突然清新了。",
-      o: [{ t: "太好了", e: { mood: 3, health: 2 } }],
+      d: "办公室的空气突然清新了许多。",
+      o: [{ t: "这是好事啊", e: { mood: 3, health: 2 } }],
     },
     {
       id: "grant",
@@ -1441,7 +1441,7 @@
       m: ["big", "nasty"],
       tone: "good",
       n: "导师拿到大项目",
-      d: "人人有份，活儿也人人有份。",
+      d: "钱包宽裕了起来，活儿也人人有份。",
       o: [{ t: "收下", e: { money: 200, health: -2 } }],
     },
     {
@@ -1450,9 +1450,9 @@
       m: ["nasty", "young"],
       tone: "bad",
       n: "导师组会上连连追问",
-      d: "“这周的进展能再具体一点吗？”全组安静。",
+      d: "“然后呢？所以呢？”全组安静。",
       o: [
-        { t: "认真解释", e: { ability: 1, mood: 2, trust: -3 } },
+        { t: "努力解释", e: { ability: 1, mood: 2, trust: -3 } },
         { t: "低头认错，回去改", e: { mood: -3, progress: 3 } },
         Object.assign({ t: "会后单独找导师沟通", e: { trust: 2 } }, needScheme),
       ],
@@ -1485,7 +1485,7 @@
       c: "mentor",
       tone: "mid",
       n: "导师让你带本科生毕设",
-      d: "本科生问你：“师兄师姐，Python 怎么装？”",
+      d: "本科生问你：“师兄/师姐，Python 怎么装？”",
       o: [
         { t: "认真带", e: { rel: 2, progress: -3 } },
         { t: "放养", e: { trust: -1, luck: -2 } },
@@ -1495,7 +1495,7 @@
       id: "share",
       c: "peer",
       tone: "good",
-      n: "师兄师姐分享代码和数据",
+      n: "师兄/师姐分享代码和数据",
       d: "省了你两周的重复劳动。",
       o: [{ t: "感恩", e: { progress: 5, rel: 1 } }],
     },
@@ -1520,7 +1520,7 @@
       cond: (s) => s.papers.length > 0,
       o: [
         { t: "同意", e: { rel: 3, envy: -3 } },
-        { t: "拒绝", e: { rel: -2, envy: 2 } },
+        { t: "拒绝", e: { rel: -2, envy: 2, luck: 5 } },
       ],
     },
     {
@@ -1528,13 +1528,13 @@
       c: "peer",
       tone: "bad",
       n: "同门在导师面前告你的状",
-      d: "说你天天摸鱼、抢别人的想法。",
+      d: "说你天天摸鱼，在实验室打游戏。",
       w: (s) => 1 + s.a.envy / 25,
       o: [
         { t: "当面对质", e: { rel: -3, trust: -2 } },
         { t: "忍了", e: { mood: -3, trust: -2, scheme: 3 } },
         Object.assign(
-          { t: "留好证据，私下澄清", e: { trust: 1, envy: -2, scheme: 3 } },
+          { t: "留好证据，反将一军", e: { trust: 1, envy: -2, scheme: 3 } },
           needScheme,
         ),
       ],
@@ -1543,7 +1543,7 @@
       id: "gpu",
       c: "peer",
       tone: "bad",
-      n: "服务器 GPU 被同门占满",
+      n: "服务器 GPU 被其他人占满",
       d: "nvidia-smi 一片红。",
       o: [
         { t: "半夜爬起来抢", e: { progress: 3, health: -3 } },
@@ -1564,7 +1564,7 @@
       id: "review",
       c: "research",
       tone: "mid",
-      n: "帮导师审稿",
+      n: "导师发来了新的审稿任务",
       d: "署名是导师，干活是你。",
       o: [
         { t: "认真审完", e: { ability: 2, health: -1 }, r: "你写了整整两页意见。" },
@@ -1590,9 +1590,9 @@
       n: "arXiv 上刚挂出一篇和你撞 idea 的论文",
       d: "连图都长得像。",
       o: [
-        { t: "换方向", e: { progress: -8, ability: 2 } },
+        { t: "直接换方向", e: { progress: -8, ability: 2 } },
         { t: "硬着头皮做差异化", e: { mood: -3, ability: 1 } },
-        { t: "当作没看见，也不引用它", e: { luck: -3, res: -1 } },
+        { t: "当作没看见，也不引用它", e: { luck: -2, res: -1 } },
       ],
     },
     {
@@ -1633,7 +1633,7 @@
       c: "life",
       tone: "good",
       n: "有人对你心动",
-      d: "大概是因为你头发还挺多。有对象的话每个月心情都会好一点。约会、送礼、旅游在每月的活动页里，只花钱、不占活动次数；连续两个月不互动，对方会提分手。",
+      d: "大概是因为你头发还挺多。有对象的话每个月心情都会好一点哦。",
       cond: (s) => s.a.hair > 70 && !s.partner && !s.ex,
       o: [
         {
@@ -1655,7 +1655,7 @@
       tone: "good",
       fix: (s) => s.month % 12 === 2,
       n: "奖学金评定",
-      d: "今年的奖学金评定开始了。评审只看过去一年发表的论文：有 CCF-A 拿一等，有 CCF-B 拿二等，有 CCF-C 拿三等。",
+      d: "今年的奖学金评定开始了。评审只看过去一年发表的论文。",
       o: [
         {
           t: "看结果",
@@ -1717,14 +1717,14 @@
       c: "life",
       tone: "bad",
       n: "换季感冒",
-      d: "全实验室轮流咳嗽。",
+      d: "全实验室轮流咳嗽发烧。",
       o: [{ t: "多喝热水", e: { health: -3 } }],
     },
     {
       id: "family",
       c: "life",
       tone: "bad",
-      n: "家里打电话",
+      n: "家里打来电话",
       d: "“什么时候毕业？有没有对象？”",
       o: [{ t: "嗯嗯好的", e: { mood: -3 } }],
     },
@@ -1763,7 +1763,7 @@
         {
           t: "每天准时打卡",
           e: { trust: 3 },
-          r: "闹钟从八点半提前到了七点半。",
+          r: "闹钟从九点提前到了八点。",
           fn: (s) => {
             s.clockLeft = 3;
             return "接下来三个月，每月初心情-2、健康-1";
@@ -1791,16 +1791,16 @@
       n: "导师要求写日报、周报、月报",
       d: "“从这周开始，每天下班前发日报，周五交周报，月底交月报。”",
       o: [
-        { t: "认真写", e: { trust: 3, mood: -3, health: -1 }, r: "写日报的时间比干活的时间还长。" },
-        { t: "复制粘贴，换换日期", e: { trust: -1, luck: -1 }, r: "导师好像没发现，又好像发现了。" },
-        { t: "顺手把计划理清楚", e: { progress: 3, mood: -2 }, r: "写着写着，你发现自己确实该干点正事了。" },
+        { t: "事无巨细地写", e: { trust: 3, mood: -3, health: -1 }, r: "写日报的时间比干活的时间还长。" },
+        { t: "复制粘贴上周的，换换日期", e: { trust: -1, luck: -1 }, r: "导师好像没发现，又好像发现了。" },
+        { t: "顺手把明日计划理清楚", e: { progress: 3, mood: -2 }, r: "写着写着，你发现自己确实该干点正事了。" },
       ],
     },
     {
       id: "phdoffer",
       c: "mentor",
       tone: "mid",
-      n: "导师给你一个实习机会，条件是留下来读博",
+      n: "导师给你一个令人羡慕的实习机会，条件是留下读博",
       d: "“这家公司的负责人是我的老同学，实习名额我可以帮你要。不过我希望你硕士毕业后留在组里读博。”",
       cond: (s) => s.month > 12 && s.interns < 2 && !s.internLeft && !s.phd,
       o: [
@@ -1813,7 +1813,7 @@
             return startIntern(s, "导师批了") + "；你答应了硕士毕业后留组读博";
           },
         },
-        { t: "婉拒", e: { trust: -3 }, r: "导师说：“那你再考虑考虑。”" },
+        { t: "婉拒", e: { trust: -3 }, r: "导师说：“你好好考虑考虑。”" },
       ],
     },
     /* ---------- 2026-11-18 新增：同门 ---------- */
@@ -1828,6 +1828,7 @@
         { t: "真心祝贺，顺便请教投稿经验", e: { rel: 2, ability: 1 }, r: "对方把审稿意见和 rebuttal 全发给了你。" },
         { t: "说声恭喜，回去默默加班", e: { progress: 4, health: -2 }, r: "那天晚上，实验室最后一盏灯是你关的。" },
         { t: "心里有点酸", e: { mood: -3, res: -1 }, r: "你刷了一晚上那篇论文，越看越睡不着。" },
+        { t: "强啊姐妹/兄弟", e: { mood: +3, res: +1 }, r: "说明我们组有发顶会论文的实力，信心大增。" },
       ],
     },
     {
@@ -1838,7 +1839,7 @@
       d: "“我去食堂，要不要帮你带一份？”",
       o: [
         { t: "要一份烧鸭饭", e: { money: -20, mood: 2, rel: 1 }, r: "饭到的时候还是热的。" },
-        { t: "不用啦，下次我帮你带", e: { rel: 1 }, r: "你们约好轮流带饭。" },
+        { t: "今天不用啦，下次我帮你带", e: { rel: 1 }, r: "从此你们约好轮流带饭。" },
       ],
     },
     {
@@ -1848,11 +1849,11 @@
       n: "实验室团建",
       d: "一位师兄/师姐在群里发起投票：这周末团建去哪？",
       o: [
-        { t: "一起打桌游", e: { mood: 3, rel: 2, scheme: 1 }, r: "狼人杀玩到第三局，你已经能看出谁在演了。" },
+        { t: "一起打桌游", e: { mood: 3, rel: 2, scheme: 1 }, r: "玩到第三局，你已经能看出谁在演了。" },
         {
-          t: "去喝早茶，点牛腩包和虾饺",
+          t: "去吃早茶，点豉汁排骨和虾饺",
           e: { money: -80, mood: 3, health: 1, rel: 2 },
-          r: "一笼牛腩包刚上桌就被抢光了。",
+          r: "一盘虾饺刚上桌就被抢光了。",
         },
         { t: "不去，留在实验室跑实验", e: { progress: 3, rel: -2 }, r: "整层楼只剩你和服务器。" },
       ],
@@ -1943,7 +1944,7 @@
         {
           t: "好呀",
           e: { mood: 3, rel: 1 },
-          r: "一顿饭吃了三个小时，你们居然是同一个县城出来的。",
+          r: "一顿饭吃了三个小时，你们居然是同一个地方出来的。",
           fn: (s) => {
             s.cardOwner = 2;
             return "";
@@ -2073,8 +2074,8 @@
       d: "答辩结束，终于自由了。同门在群里提议：毕业旅行去粤港澳大湾区！",
       fix: (s) => s.month === 34 + 6 * s.ext && s.defended,
       o: [
-        { t: "去香港澳门，看维港夜景", e: { money: -800, mood: 6, health: 1 }, r: "灯光秀亮起来的时候，你突然有点舍不得毕业。" },
-        { t: "去广州深圳，从早茶吃到宵夜", e: { money: -400, mood: 5, rel: 2 }, r: "肠粉、烧鹅、椰子鸡，一天吃了五顿。" },
+        { t: "去香港澳门，看维港夜景", e: { money: -800, mood: 8, health: 1 }, r: "灯光秀亮起来的时候，你突然有点舍不得毕业。" },
+        { t: "去广州深圳，从早茶吃到宵夜", e: { money: -400, mood: 5, rel: 2 }, r: "肠粉、烧鹅、牛腩煲、椰子鸡，你一天吃了五顿。" },
         { t: "在宿舍躺平，看大家发动态", e: { mood: 1 }, r: "你把每个人的照片都点了赞。" },
       ],
     },
@@ -2084,9 +2085,9 @@
       when: "硕士三年级 7 月（延毕则顺延半年）",
       tone: "mid",
       n: "各奔东西",
-      d: "7 月，宿舍楼下堆满了打包好的纸箱。你和同门在校门口拍了最后一张合影，然后各奔东西。",
+      d: "7 月，宿舍楼下堆满了打包好的纸箱和麻袋。你和同学们在校门口拍了最后一张合影，挥挥手各奔东西。",
       fix: () => false,
-      o: [{ t: "再见", e: {} }],
+      o: [{ t: "再见！", e: {} }],
     },
     {
       id: "plagcheck",
@@ -2112,8 +2113,8 @@
           r: "相关工作那一章果然标红了一片。",
           fn: (s) => {
             if (Math.random() < 0.15) {
-              s.blindAdj = (s.blindAdj || 0) - 8;
-              return "没查的那几章也有问题，学校查重被打回降重，盲审分数-8";
+              s.blindAdj = (s.blindAdj || 0) - 4;
+              return "没查的那几章也有问题，学校查重被打回降重，盲审分数-4";
             }
             return "学校查重顺利通过";
           },
@@ -2124,9 +2125,9 @@
           r: "你对自己写的东西很有信心。",
           fn: (s) => {
             if (Math.random() < 0.35) {
-              s.blindAdj = (s.blindAdj || 0) - 8;
+              s.blindAdj = (s.blindAdj || 0) - 6;
               s.a.mood = clamp(s.a.mood - 3);
-              return "引用的定义和公式撞了一大片，学校查重被打回降重，盲审分数-8，心情-3";
+              return "引用的定义和公式撞了一大片，学校查重被打回降重，盲审分数-6，心情-3";
             }
             return "学校查重顺利通过，省下了几百块";
           },
@@ -2161,7 +2162,7 @@
       tone: "mid",
       fix: (s) => s.month % 12 === 3,
       n: "购物节",
-      d: "11 月的购物节到了。购物车里躺着二十件“早晚用得上”的东西，满减凑到了凌晨一点。",
+      d: "购物节到了。购物车里躺着二十件“早晚用得上”的东西，满减凑到了凌晨一点。",
       o: [
         { t: "全部下单", e: { money: -300, mood: 4 }, r: "接下来一周，快递站的人都认识你了。" },
         { t: "只买真正需要的", e: { money: -80, mood: 1 }, r: "理智地凑了个满减。" },
@@ -2175,18 +2176,17 @@
       n: "室友睡觉磨牙打呼",
       d: "凌晨两点，上铺的呼噜声和对床的磨牙声此起彼伏。",
       o: [
-        { t: "买一副好耳塞", e: { money: -30, mood: -1 }, r: "世界终于安静了。" },
+        { t: "买一副好耳塞，又套上降噪耳机", e: { money: -30, mood: -1 }, r: "世界终于安静了。" },
         { t: "硬扛着", e: { health: -2, mood: -2 }, r: "你数羊数到了第三千只。" },
         { t: "第二天委婉提醒一下", e: { rel: -1, mood: 1 }, r: "室友有点不好意思，说去买个止鼾贴。" },
       ],
     },
-    /* ---------- 2026-11-18 第 72 次新增 ---------- */
     {
       id: "firsttrip",
       c: "peer",
       tone: "good",
       n: "第一次跟同门一起出差",
-      d: "跟着师兄/师姐去外地开项目会。会上说的你一半没听懂，但是不用泡实验室，高铁上的盒饭都是香的。",
+      d: "跟着老板一起去外地开项目会。会上说的你一句没听懂，但是不用泡实验室，飞机上的盒饭都是香的。",
       cond: once("firsttrip"),
       o: [{ t: "出发", e: { envy: -3, rel: 2, mood: 3 } }],
     },
@@ -2198,23 +2198,23 @@
       d: "开业打八折。同门在群里喊：“今晚谁去？”",
       o: [
         { t: "一起去", e: { money: -60, mood: 3, rel: 2 }, r: "一条鱼四个人抢，最后连豆芽都捞干净了。" },
-        { t: "下次吧", e: {}, r: "群里发来一张烤鱼的照片。" },
+        { t: "下次吧", e: {}, r: "群里发来一张烤鱼的照片，看起来皮很脆。" },
       ],
     },
     {
       id: "localfood",
       c: "peer",
       tone: "good",
-      n: "同门分享了家里寄来的特产",
+      n: "同门大方分享了家里寄来的特产",
       d: "一个大纸箱摆在实验室中间：“家里寄的，大家随便拿。”",
-      o: [{ t: "拿一包尝尝", e: { mood: 2, rel: 1 } }],
+      o: [{ t: "拿一份尝尝", e: { mood: 2, rel: 1 } }],
     },
     {
       id: "mango",
       c: "peer",
       tone: "good",
       n: "同门分享了家里寄来的芒果",
-      d: "一整箱自家树上摘的芒果，熟得刚刚好，实验室里全是甜味。",
+      d: "一整箱新鲜的芒果，一直放到全部熟透，实验室里全是甜味。",
       o: [{ t: "吃一个", e: { mood: 2, health: 1, rel: 1 } }],
     },
     {
@@ -2222,9 +2222,9 @@
       c: "peer",
       tone: "good",
       n: "披萨店七五折",
-      d: "你本来想自己点一个，转念一想：披萨还是得跟同门一起吃才爽。",
+      d: "一个人点根本吃不完，披萨还是得人多一起吃才爽。",
       o: [
-        { t: "拼单，叫上同门", e: { money: -50, mood: 3, rel: 2 }, r: "两个大披萨十分钟就没了。" },
+        { t: "叫上同门一起", e: { money: -50, mood: 3, rel: 2 }, r: "三个大披萨十分钟就没了。" },
         { t: "算了，吃食堂", e: {}, r: "省钱也是一种快乐。" },
       ],
     },
@@ -2232,10 +2232,10 @@
       id: "aquarium",
       c: "peer",
       tone: "good",
-      n: "跟同门一起去水族馆",
-      d: "周末难得没有组会，同门买了团购票。",
+      n: "跟同门一起去海洋馆",
+      d: "组会结束，同门买了团购票。",
       o: [
-        { t: "去看水母", e: { money: -100, mood: 4, rel: 2 }, r: "你在水母缸前站了半个小时，什么都没想。" },
+        { t: "去看北极熊和企鹅", e: { money: -100, mood: 4, rel: 2 }, r: "你在水底隧道站了半个小时，什么都没想。" },
         { t: "留下来赶进度", e: { progress: 2, rel: -1 }, r: "群里刷屏的全是水母。" },
       ],
     },
@@ -2275,10 +2275,10 @@
       c: "life",
       tone: "bad",
       n: "被蠓虫咬了",
-      d: "去草坪上坐了十分钟，小腿上起了一串红包，又痒又疼。",
+      d: "去公园草地上坐了十分钟，第二天腿上起了一大片红包，又痒又疼。",
       o: [
-        { t: "去买支药膏", e: { money: -20, health: -1 }, r: "涂上凉凉的，好多了。" },
-        { t: "忍着，别挠", e: { health: -2, mood: -2 }, r: "你还是没忍住。" },
+        { t: "去校医院开支药膏", e: { money: -2, health: -2 }, r: "涂上凉凉的，好多了。" },
+        { t: "忍忍就过去了", e: { health: -2, mood: -2 }, r: "奇痒难耐，根本忍不下去。" },
       ],
     },
     {
@@ -2299,7 +2299,7 @@
       o: [
         { t: "叫上同门一人一杯", e: { money: -20, mood: 2, rel: 1 }, r: "你们在群里给新品打了八分。" },
         { t: "两杯都自己喝", e: { money: -20, mood: 3, health: -1 }, r: "喝到第二杯有点撑。" },
-        { t: "忍住不喝", e: {}, r: "省下二十块。" },
+        { t: "忍住不喝", e: {}, r: "不买立省二十块。" },
       ],
     },
     {
@@ -2307,9 +2307,9 @@
       c: "life",
       tone: "good",
       n: "看脱口秀",
-      d: "朋友多了一张脱口秀的票。演员讲读研的段子，台下笑得最大声的就是你。",
+      d: "朋友推荐了一个脱口秀演员。演员讲读研的段子，台下笑得最大声的就是你。",
       o: [
-        { t: "去看", e: { money: -100, mood: 4, res: 1 }, r: "原来大家都过得差不多。" },
+        { t: "去看", e: { money: -180, mood: 4, res: 1 }, r: "原来大家都过得差不多。" },
         { t: "在宿舍看录播", e: { mood: 2 }, r: "笑得室友探头看了你一眼。" },
       ],
     },
@@ -2318,10 +2318,10 @@
       c: "life",
       tone: "good",
       n: "在快递站帮外国同学寄快递",
-      d: "一个外国同学对着寄件单发愁，快递站的工作人员也听不懂对方在说什么。",
+      d: "一个外国同学对着中文寄件单发愁，快递站的工作人员也听不懂对方在说什么。",
       o: [
-        { t: "上去帮忙", e: { luck: 2, mood: 1 }, r: "你连说带比划了十分钟，对方走之前塞给你一块巧克力。" },
-        { t: "寄完自己的就走", e: {}, r: "身后传来一句“Thank you anyway”。" },
+        { t: "上去帮忙", e: { luck: 2, mood: 2 }, r: "你连说带比划了十分钟，英语不好也不妨碍我热心肠。" },
+        { t: "寄完自己的就走", e: {}, r: "相信手机翻译软件的能力。" },
       ],
     },
     {
@@ -2329,10 +2329,10 @@
       c: "life",
       tone: "good",
       n: "周四炸鸡特价",
-      d: "楼下炸鸡店周四全场特价。群里已经有人在要 V 我 50 了。",
+      d: "楼下炸鸡店周四全场特价。群里已经有人在发 V 我 50 了。",
       o: [
         { t: "去吃", e: { money: -50, mood: 2, health: -1 }, r: "炸鸡配可乐，永远的神。" },
-        { t: "转发段子，不去", e: { mood: 1 }, r: "你在群里发了一段编好的故事。" },
+        { t: "发段子，不去", e: { mood: 1 }, r: "你在群里发了一段自己现编的段子。" },
       ],
     },
     {
@@ -2341,7 +2341,7 @@
       tone: "good",
       n: "快餐店穷鬼套餐",
       d: "汉堡、薯条、可乐，十几块钱。月底了，这就是最好的一顿。",
-      o: [{ t: "来一份", e: { money: -15, mood: 2 } }],
+      o: [{ t: "来一份", e: { money: -15, mood: 2 } , r: "怎么感觉汉堡越来越小了。"}],
     },
     {
       id: "wisdom",
@@ -2377,7 +2377,7 @@
       c: "research",
       tone: "mid",
       n: "一个人在实验室待到凌晨",
-      d: "整层楼的灯都灭了，只剩你这一盏。看着跑完的实验，你都有点佩服自己。",
+      d: "整间实验室空荡荡的。看着跑完的实验，你都有点佩服自己。",
       o: [{ t: "收工回宿舍", e: { progress: 4, res: 1, health: -2 } }],
     },
     /* ---------- 2026-11-18 第 74 次新增 ---------- */
@@ -2385,8 +2385,8 @@
       id: "leftover",
       c: "peer",
       tone: "bad",
-      n: "同门转组了，项目留给了你",
-      d: "同门跟导师谈崩了，下周就去隔壁组。导师把对方做了一半的项目丢给你：“你接着做。”",
+      n: "师兄/师姐毕业了，项目留给了你",
+      d: "导师把对方做了一半的项目丢给你：“你接着做。”",
       cond: (s) => s.month > 6,
       o: [
         { t: "接下来，好好做完", e: { trust: 3, progress: -4, health: -2 }, r: "那份代码一个注释都没有。" },
@@ -2402,7 +2402,7 @@
       c: "peer",
       tone: "bad",
       n: "同门在实验室大声打电话",
-      d: "对面工位的同门又在打电话，一打就是半个小时，嗓门大得整个实验室都听得见。",
+      d: "旁边工位的同门又在打电话，一打就是半个小时，整个实验室都听得见。",
       o: [
         { t: "提醒对方小声点", e: { rel: -2, mood: 1 }, r: "对方拿着手机出去打了，但之后见面有点尴尬。" },
         { t: "戴上耳机忍着", e: { mood: -2 }, r: "耳机里的白噪音盖不住那边的嗓门。" },
@@ -2412,12 +2412,12 @@
       id: "popsicle",
       c: "peer",
       tone: "bad",
-      n: "冰箱里你的冰棍被人吃了",
-      d: "你惦记了一下午的那根冰棍，冰箱里只剩一个空包装袋。",
+      n: "冰箱里你的小蛋糕被人吃了",
+      d: "你惦记了一下午的那块小蛋糕，冰箱里只剩一个空包装盒。",
       o: [
         { t: "在群里问是谁吃的", e: { rel: -1 }, r: "群里一片沉默，然后有人发了个“对不起”的表情。" },
-        { t: "在冰箱上贴张纸条", e: { mood: -1, scheme: 1 }, r: "“本冰棍已舔过。”之后再也没丢过。" },
-        { t: "算了，再去买一根", e: { money: -5, mood: -1 }, r: "还是你最爱的那个口味。" },
+        { t: "在冰箱上贴张纸条", e: { mood: -1, scheme: 1 }, r: "“本小蛋糕已舔过。”之后再也没丢过。" },
+        { t: "算了，再去买一块", e: { money: -5, mood: -1 }, r: "还是你最爱的那个味道。" },
       ],
     },
     {
@@ -2426,7 +2426,7 @@
       when: "硕士一年级和二年级的 6 月",
       tone: "good",
       n: "师兄师姐毕业了",
-      d: "师兄师姐在收拾工位，东西谁要谁拿。人缘越好，分到的越多。",
+      d: "师兄师姐在收拾工位，东西谁要谁拿。",
       fix: (s) => s.month === 10 || s.month === 22,
       o: [
         {
@@ -2436,12 +2436,12 @@
             const r = s.a.rel;
             const [x, e] =
               r >= 80
-                ? ["大显示器、人体工学椅、机械键盘，连那盆养了三年的绿萝都留给了你", { health: 4, mood: 3, progress: 3 }]
+                ? ["大显示器、人体工学椅、机械键盘，连那盆养了三年的绿萝都留给了你", { health: 5, mood: 3, progress: 3 }]
                 : r >= 60
                   ? ["大显示器和人体工学椅都留给了你", { health: 3, mood: 2, progress: 2 }]
                   : r >= 40
                     ? ["你分到了一把人体工学椅", { health: 2, mood: 1 }]
-                    : ["好东西都被别人拿走了，你只捡到一个靠枕", { health: 1 }];
+                    : ["好东西都被别人拿走了，你只捡到坐垫和靠枕", { health: 1 }];
             return x + "。" + applyEff(e, true);
           },
         },
@@ -2457,7 +2457,7 @@
       fix: (s) => s.month % 12 === 1,
       o: [
         { t: "参与凑份子", e: { money: -50, trust: 2, rel: 1 }, r: "卡片上签了一排名字，你的在中间。" },
-        { t: "自己再单独送一份", e: { money: -200, trust: 4, envy: 2 }, r: "导师收下了，同门看你的眼神有点微妙。" },
+        { t: "自己单独送一份", e: { money: -200, trust: 4, envy: 2 }, r: "导师收下了，同门看你的眼神有点微妙。" },
         { t: "不参与", e: { rel: -1, trust: -1 }, r: "卡片上没有你的名字。" },
       ],
     },
@@ -2875,7 +2875,7 @@
   const MKEY = "yanmo_meta_v1";
   // endings / events / ach / runs 只记本机玩出来的；peers 是从别的浏览器导入的记录，按设备编号分开存，
   // 同一个文件导入两次只会覆盖、不会重复累加。显示时用下面的 endCount / evSeen / achGot / allRuns 合起来算。
-  let M = { dev: "", endings: {}, events: {}, ach: {}, runs: [], peers: {} };
+  let M = { dev: "", endings: {}, events: {}, ach: {}, runs: [], peers: {}, noRank: false, rq: [], rmq: false };
   function loadMeta() {
     try {
       const t = localStorage.getItem(MKEY);
@@ -2889,6 +2889,9 @@
           runs: m.runs || [],
           peers: m.peers || {},
           sex: m.sex === "b" ? "b" : m.sex === "g" ? "g" : "",
+          noRank: !!m.noRank,
+          rq: Array.isArray(m.rq) ? m.rq.slice(-10) : [],
+          rmq: !!m.rmq,
         };
       }
     } catch (e) {}
@@ -2918,6 +2921,165 @@
     try {
       localStorage.setItem(MKEY, JSON.stringify(M));
     } catch (e) {}
+  }
+
+  /* ================================================================
+   * 排行榜：按毕业论文盲审分数排名，每个浏览器只留最高分、最低分各一条。
+   * 数据存在 Cloudflare 的 D1 数据库，接口是同一网站下的 /api/（见 functions/api/[[route]].js）。
+   * 走到盲审的局在结局时自动提交；没联网时先存在 M.rq，下次打开或打开排行榜时补交。
+   * 小红书版不能联网，打包时这一段要去掉（rankOn 也会因为没有 fetch 直接返回 false）。
+   * ================================================================ */
+  // 接口地址：留空表示和游戏同一个网站。游戏放在别处（比如 GitHub Pages）时，填 Cloudflare 上的网址，例如 "https://grad-sim.pages.dev"
+  const RANK_API = "";
+  const RK = { st: "", data: null, tab: "hi" };
+  function rankOn() {
+    return (
+      typeof fetch === "function" &&
+      typeof location !== "undefined" &&
+      /^https?:$/.test(location.protocol)
+    );
+  }
+  function rankReq(path, opt) {
+    return fetch(RANK_API + "/api/" + path, opt);
+  }
+  // 依次补交没传上去的成绩；退出排行榜时没删成功的，也在这里补删
+  function rankFlush() {
+    if (!rankOn()) return Promise.resolve();
+    if (M.rmq)
+      return rankReq("me?dev=" + encodeURIComponent(M.dev), { method: "DELETE" })
+        .then((r) => {
+          if (r.ok) {
+            M.rmq = false;
+            saveMeta();
+            return rankFlush();
+          }
+        })
+        .catch(() => {});
+    if (M.noRank || !M.rq || !M.rq.length) return Promise.resolve();
+    return rankReq("submit", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(M.rq[0]),
+    })
+      .then((r) => {
+        // 400 是数据本身不合格，重试也没用，直接丢掉
+        if (r.ok || r.status === 400) {
+          M.rq.shift();
+          saveMeta();
+          return rankFlush();
+        }
+      })
+      .catch(() => {});
+  }
+  function rankSubmit(k) {
+    if (!S.bt || M.noRank) return;
+    M.rq = (M.rq || [])
+      .concat([
+        {
+          dev: M.dev,
+          name: S.name,
+          sex: curSex(),
+          score: S.blind,
+          mentor: S.mentor ? S.mentor.name : "",
+          end: k,
+        },
+      ])
+      .slice(-10);
+    saveMeta();
+    rankFlush();
+  }
+  function rankLoad() {
+    if (!rankOn()) {
+      RK.st = "off";
+      return;
+    }
+    RK.st = "load";
+    rankFlush()
+      .then(() => rankReq("board?dev=" + encodeURIComponent(M.dev)))
+      .then((r) => {
+        if (r.status === 404) throw "off";
+        if (!r.ok) throw "err";
+        return r.json();
+      })
+      .then((d) => {
+        RK.data = d;
+        RK.st = "ok";
+      })
+      .catch((e) => {
+        RK.st = e === "off" ? "off" : "err";
+      })
+      .then(() => {
+        if (S.modal === "rank") render();
+      });
+  }
+  function rankHtml() {
+    if (!RK.st) rankLoad();
+    const hi = RK.tab !== "lo";
+    let h =
+      '<div class="top"><h2>排行榜</h2><button class="mini" onclick="G.modal(null)">关闭</button></div>' +
+      '<p class="muted">按毕业论文盲审分数排名。每个人只留自己的最高分和最低分各一条（同一个浏览器算一个人），走到盲审的局在结局时自动上榜。</p>' +
+      '<div class="chips rk-tabs"><button class="chip' +
+      (hi ? " on" : "") +
+      '" onclick="G.rankTab(\'hi\')">高分榜</button><button class="chip' +
+      (hi ? "" : " on") +
+      '" onclick="G.rankTab(\'lo\')">低分榜</button></div>';
+    if (RK.st === "off")
+      return h + '<p class="result">这个网址没有排行榜服务，换到游戏的正式网址再打开就能看到。</p>';
+    if (RK.st === "err")
+      return (
+        h +
+        '<p class="result">排行榜暂时连不上，可能是网络不好。</p><button class="ghost" onclick="G.rank()">再试一次</button>'
+      );
+    if (RK.st !== "ok" || !RK.data) return h + '<p class="muted">正在加载……</p>';
+    const L = RK.data[hi ? "hi" : "lo"] || [];
+    let prev = null,
+      no = 0;
+    h += L.length
+      ? '<ol class="rk">' +
+        L.map((r, i) => {
+          // 分数一样的并列同一名
+          if (r.score !== prev) {
+            no = i + 1;
+            prev = r.score;
+          }
+          return (
+            '<li class="' +
+            (r.me ? "mine" : "") +
+            '"><span class="rk-n">' +
+            no +
+            '</span><img class="ava rk-ava" alt="" src="' +
+            AVATAR[r.sex === "b" ? "b" : "g"] +
+            '"><span class="rk-who"><b>' +
+            esc(r.name) +
+            (r.me ? "<i>你</i>" : "") +
+            "</b><small>" +
+            (r.mentor ? "师从" + esc(r.mentor) : "") +
+            (ENDINGS[r.end] ? " · " + ENDINGS[r.end][0] : "") +
+            '</small></span><span class="rk-sc">' +
+            r.score +
+            "<small>分</small></span></li>"
+          );
+        }).join("") +
+        "</ol>"
+      : '<p class="muted">还没有人上榜，快来当第一个。</p>';
+    const me = RK.data.me;
+    const wait = !M.noRank && M.rq && M.rq.length;
+    h +=
+      '<p class="muted rk-me">' +
+      (M.noRank
+        ? "你现在不参加排行榜，可以在「存档」里重新打开。"
+        : me
+          ? (hi
+              ? "你的最高分 " + me.hi + " 分，排第 " + me.hiRank
+              : "你的最低分 " + me.lo + " 分，排第 " + me.loRank) +
+            " 名，一共 " +
+            RK.data.total +
+            " 人上榜。"
+          : "你还没有上榜。打到毕业论文盲审，结局时会自动上榜。") +
+      (wait ? "还有 " + M.rq.length + " 局成绩没传上去，联网后会自动补交。" : "") +
+      (M.noRank ? "" : "<br>上榜时会公开显示你起的名字和头像。") +
+      "</p>";
+    return h;
   }
   const ACH = [
     { id: "juan", n: "卷王", d: "找导师开小会 28 次以上", c: (s) => (s.tot.meet || 0) >= 28 },
@@ -3364,6 +3526,7 @@
     S.notices = [];
     S.ask = null;
     recordRun(k);
+    rankSubmit(k);
   }
   function checks() {
     if (S.screen !== "main") return;
@@ -3561,6 +3724,7 @@
     if (S.month === 33 + 6 * S.ext && !S.blindOK) {
       const sc = blindScore(true);
       S.blind = sc;
+      S.bt = 1;
       let t;
       if (sc >= 80) {
         S.blindOK = true;
@@ -4393,6 +4557,26 @@
     S.modal = m;
     S.open = null;
     S.impMsg = "";
+  });
+  G.rank = act(() => {
+    S.modal = "rank";
+    S.open = null;
+    rankLoad();
+  });
+  G.rankTab = act((t) => {
+    RK.tab = t === "lo" ? "lo" : "hi";
+  });
+  // on=false：退出排行榜，删掉已上榜的成绩，没传的也不再传；on=true：以后的局重新参加
+  G.rankOpt = act((on) => {
+    M.noRank = !on;
+    M.rq = [];
+    M.rmq = !on;
+    saveMeta();
+    RK.st = "";
+    S.impMsg = on
+      ? "已重新参加排行榜，之后打到盲审的局会自动上榜。"
+      : "已退出排行榜，已经上榜的成绩会从榜上删掉。";
+    rankFlush();
   });
   G.open = act((t, id) => {
     S.open = t ? { t: t, id: id } : null;
@@ -5311,6 +5495,16 @@
       '<div class="actions"><button class="big" onclick="G.exportSave()">导出存档</button><button class="big" onclick="G.pickFile()">导入存档</button></div>' +
       '<input type="file" id="impfile" accept=".json,application/json" hidden onchange="G.importFile(this)"></div>';
     h +=
+      '<div class="setbox"><h3 class="sub">排行榜</h3><p class="muted">' +
+      (M.noRank
+        ? "你现在不参加排行榜，打完的局不会上传。"
+        : "走到盲审的局会把名字、头像、导师、结局和盲审分数传到排行榜，名字公开显示。") +
+      '</p><button onclick="G.rankOpt(' +
+      (M.noRank ? "true" : "false") +
+      ')">' +
+      (M.noRank ? "重新参加排行榜" : "不参加排行榜，并删掉我已上榜的成绩") +
+      "</button></div>";
+    h +=
       '<div class="setbox"><h3 class="sub">图鉴记录</h3><p class="muted">本浏览器玩完 ' +
       runs +
       (runs >= 20 ? "+" : "") +
@@ -5324,6 +5518,7 @@
     if (S.screen !== "main" && S.modal === "album")
       h += overlayC(albumHtml(), S.open && S.open.t ? "pin" : "");
     if (S.screen !== "main" && S.modal === "settings") h += overlayC(settingsHtml());
+    if (S.screen !== "main" && S.modal === "rank") h += overlayC(rankHtml(), "pin");
     return h;
   }
   function view0() {
@@ -5336,7 +5531,7 @@
         (has
           ? '<button class="primary" onclick="G.resume()">继续上次的进度</button><button class="ghost" onclick="G.start()">重新入学</button>'
           : '<button class="primary" onclick="G.start()">报到入学</button>') +
-        '<button class="ghost" onclick="G.modal(\'album\')">图鉴：结局、成就、历史</button><button class="ghost" onclick="G.modal(\'settings\')">存档：导入、导出</button></div></div>'
+        '<button class="ghost" onclick="G.rank()">排行榜：盲审最高分和最低分</button><button class="ghost" onclick="G.modal(\'album\')">图鉴：结局、成就、历史</button><button class="ghost" onclick="G.modal(\'settings\')">存档：导入、导出</button></div></div>'
       );
     }
     if (S.screen === "drawStudent") {
@@ -5512,7 +5707,9 @@
             );
           })
           .join("") || '<span class="muted">这一局没有解锁成就。</span>') +
-        '</div><button class="ghost" onclick="G.modal(\'album\')">查看图鉴</button></div><button class="primary" onclick="G.restart()">再读一次研</button>'
+        '</div><button class="ghost" onclick="G.modal(\'album\')">查看图鉴</button>' +
+        (S.bt ? '<button class="ghost" onclick="G.rank()">看看排行榜</button>' : "") +
+        '</div><button class="primary" onclick="G.restart()">再读一次研</button>'
       );
     }
     return "";
@@ -5562,4 +5759,5 @@
   };
   (typeof window !== "undefined" ? window : globalThis).G = G;
   render();
+  rankFlush();
 })();

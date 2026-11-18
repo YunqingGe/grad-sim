@@ -1205,3 +1205,87 @@ button.chip.on {
   color: #fff;
   text-align: center;
 }
+
+/* 排行榜：高分榜 / 低分榜两个标签，每行是名次、头像、名字和导师结局、分数；自己那一行用荧光黄标出来 */
+.rk-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 4px 0 2px;
+}
+.rk {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rk li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px 6px 6px;
+  border: 1.5px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+}
+.rk li.mine {
+  border-color: var(--ink);
+  background: #fff6cc;
+}
+.rk-n {
+  flex: none;
+  width: 1.8em;
+  text-align: center;
+  font-family: var(--display);
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.rk-ava {
+  flex: none;
+  width: 34px;
+  height: 34px;
+}
+.rk-who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+}
+.rk-who b,
+.rk-who small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rk-who b {
+  font-weight: 600;
+}
+.rk-who i {
+  font-style: normal;
+  font-size: 11px;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 99px;
+  background: var(--hl);
+}
+.rk-who small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.rk-sc {
+  flex: none;
+  font-family: var(--display);
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+.rk-sc small {
+  font-family: var(--body);
+  font-size: 12px;
+  color: var(--muted);
+  margin-left: 1px;
+}
+.rk-me {
+  margin-top: 4px;
+}
