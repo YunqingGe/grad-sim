@@ -390,6 +390,13 @@ button.sel:hover:not(:disabled) {
 button.go:hover:not(:disabled) {
   background: #ffcf24;
 }
+/* 论文页的投稿按钮：黄色，和其他阶段按钮区分开 */
+button.submit {
+  background: var(--hl);
+}
+button.submit:hover:not(:disabled) {
+  background: #ffcf24;
+}
 .board {
   display: grid;
   grid-template-columns: repeat(10, 1fr);
